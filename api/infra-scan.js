@@ -2,7 +2,7 @@ const crypto=require('crypto');
 const { json, methodNotAllowed, requestId } = require('./_lib/http');
 const { requireSession } = require('./_lib/rbac');
 const { rest, audit } = require('./_lib/supabase');
-const { getInfraOverview } = require('./_lib/infra');
+const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
 
 function safeEqual(a,b){
  const A=Buffer.from(String(a||'')),B=Buffer.from(String(b||''));
@@ -69,10 +69,68 @@ async function persistScan(overview){
  return {observedAt,metricCount:metrics.length,scanCount:scans.length,incidentsOpenedOrUpdated:incidents.length,incidentsMitigated:recovered.length};
 }
 module.exports=async function handler(req,res){
- if(!['GET','POST'].includes(req.method))return methodNotAllowed(res,['GET','POST']);res.setHeader('x-request-id',requestId(req));
+ const mode=String(req.query?.mode||'scan');
+ res.setHeader('x-request-id',requestId(req));
+
+ if(mode!=='scan'){
+  if(req.method!=='GET')return methodNotAllowed(res,['GET']);
+  const actor=await requireSession(req,res,'infrastructure.view');if(!actor)return;
+
+  if(mode==='cloudflare')return json(res,200,await fetchCloudflareWorker());
+
+  if(mode==='dev-supabase'){
+   try{
+    const data=await fetchDevSupabaseMetrics();
+    return json(res,data.ok?200:(data.configured===false?200:503),data);
+   }catch(_){
+    return json(res,503,{erro:'Não foi possível consultar o Supabase do Dev Console.',codigo:'DEV_SUPABASE_INFRA_UNAVAILABLE'});
+   }
+  }
+
+  if(mode==='history'){
+   const source=String(req.query?.source||'supabase').replace(/[^a-z0-9_-]/gi,'').slice(0,60);
+   const metric=String(req.query?.metric||'memory_usage_percent').replace(/[^a-z0-9_.-]/gi,'').slice(0,100);
+   const hours=Math.min(Math.max(Number(req.query?.hours||24),1),720);
+   const since=new Date(Date.now()-hours*3600000).toISOString();
+   try{
+    const rows=await rest(`dev_metric_snapshots?source=eq.${encodeURIComponent(source)}&metric_key=eq.${encodeURIComponent(metric)}&observed_at=gte.${encodeURIComponent(since)}&select=metric_value,state,unit,observed_at&order=observed_at.asc&limit=2000`,{method:'GET'});
+    return json(res,200,{ok:true,source,metric,hours,points:rows||[]});
+   }catch(_){
+    return json(res,503,{erro:'Não foi possível carregar o histórico de infraestrutura.',codigo:'INFRA_HISTORY_UNAVAILABLE'});
+   }
+  }
+
+  if(mode==='overview'){
+   const overview=await getInfraOverview({includeLogs:true});
+   return json(res,200,overview);
+  }
+
+  if(mode==='runtime')return json(res,200,{...runtimeMetrics(),generatedAt:new Date().toISOString()});
+
+  if(mode==='supabase'){
+   const hours=Math.min(Math.max(Number(req.query?.hours||1),1),24);
+   const [metrics,logs]=await Promise.all([fetchSupabaseMetrics(),fetchSupabaseLogs(hours)]);
+   return json(res,200,{ok:metrics.ok,generatedAt:new Date().toISOString(),metrics,logs});
+  }
+
+  if(mode==='vercel'){
+   const provider=await fetchVercel();
+   return json(res,200,{...provider,runtime:runtimeMetrics()});
+  }
+
+  return json(res,404,{erro:'Rota de infraestrutura não encontrada.',codigo:'INFRA_ROUTE_NOT_FOUND'});
+ }
+
+ if(!['GET','POST'].includes(req.method))return methodNotAllowed(res,['GET','POST']);
  const cron=cronAuthorized(req);
- // GET é reservado ao scheduler autenticado; a UI usa POST + sessão/RBAC.
  if(req.method==='GET'&&!cron)return json(res,401,{erro:'Execução agendada não autorizada.',codigo:'CRON_UNAUTHORIZED'});
  let actor=null;if(!cron){actor=await requireSession(req,res,'agents.run');if(!actor)return}
- try{const overview=await getInfraOverview({includeLogs:true});const result=await persistScan(overview);if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:result});return json(res,200,{ok:true,result,overall:overview.overall,signals:overview.signals})}catch(e){return json(res,500,{erro:'Falha ao executar o Infrastructure & Resource Guardian.',codigo:'INFRA_SCAN_FAILED',detalhe:e?.message||null})}
+ try{
+  const overview=await getInfraOverview({includeLogs:true});
+  const result=await persistScan(overview);
+  if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:result});
+  return json(res,200,{ok:true,result,overall:overview.overall,signals:overview.signals});
+ }catch(e){
+  return json(res,500,{erro:'Falha ao executar o Infrastructure & Resource Guardian.',codigo:'INFRA_SCAN_FAILED',detalhe:e?.message||null});
+ }
 };
