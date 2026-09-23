@@ -75,6 +75,14 @@ Depois de cada correção, o console reconsulta as fontes e informa se o problem
 
 Desempenho do App (memória, travamentos e carregamento lento) chega pelo monitoramento de erros do Sra Luck com os códigos `APP_MEMORY_PRESSURE`, `APP_MAIN_THREAD_BLOCKED` e `APP_SLOW_LOAD`.
 
+## Controle do Admin Sra Luck
+
+Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funções do Admin, sem regra nova:
+
+- **Notificações** (`notificacoes.html`): ligar/desligar o lembrete de atraso, frequência, máximo de tentativas, criar/editar/ativar templates, envio manual para uma cliente e envio forçado de atrasos.
+- **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
+- **Integrações** (`integracoes.html`): testes de conexão e teste/sincronização do RD Station. Credenciais e chaves VAPID continuam sendo editadas no Admin.
+
 ## Próxima evolução
 
 Consultar `AGENTS-ROADMAP.md`.

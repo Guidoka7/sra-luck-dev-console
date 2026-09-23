@@ -173,6 +173,9 @@ function detectNotifications(data, out) {
   if (Number(n.pushSubscriptions) === 0 && (n.clientes || []).length > 0) {
     out.push(problem({ id: 'notificacoes:sem-inscricoes', dominio: 'notificacoes', tipo: 'operacional', severidade: 'warning', titulo: 'Nenhuma cliente com push ativo', descricao: 'Não existe nenhuma inscrição Web Push registrada.', impacto: 'Notificações só aparecem dentro do app.', acoes: [{ id: 'link', label: 'Ver App da cliente', tipo: 'link', href: 'app-cliente.html' }] }));
   }
+  if (n.config?.atraso_habilitado === false && Number(n.atrasadas) > 0) {
+    out.push(problem({ id: 'notificacoes:atraso-desligado', dominio: 'notificacoes', tipo: 'configuracao', severidade: 'warning', titulo: 'Lembrete de parcela atrasada está desligado', descricao: `${n.atrasadas} parcela(s) atrasada(s) sem lembrete automático porque a automação foi desligada.`, impacto: 'Confirme se é intencional; clientes em atraso não são avisadas.', acoes: [{ id: 'link', label: 'Abrir configuração', tipo: 'link', href: 'notificacoes.html' }] }));
+  }
   const allLogs = n.logs || [];
   const lastOf = (tipo) => allLogs.filter(l => l.tipo === tipo).reduce((m, l) => (!m || new Date(l.created_at) > new Date(m) ? l.created_at : m), null);
   const freq = Math.max(1, Number(n.config?.frequencia_atraso_horas) || 24);

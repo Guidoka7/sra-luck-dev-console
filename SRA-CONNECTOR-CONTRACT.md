@@ -33,10 +33,12 @@ O conector aceita mutações somente quando `DEV_CONSOLE_M2M_WRITE=1` está defi
 - Financeiro: validar/rejeitar comprovante, baixa, anexar comprovante e `PATCH` do recebível
 - App: `POST /api/admin/clientes/:id/liberar-acesso-app`
 - Notificações: `POST /api/admin/notificacoes/automacao`
-- Integrações: `POST /api/admin/integrations/testar-conexao`
+- Integrações: `POST /api/admin/integrations/testar-conexao`, `POST /api/admin/integrations/rd-station/test`, `POST /api/admin/integrations/rd-station/sync` (developer+)
+- Notificações: `PATCH /api/admin/notificacoes/automacao` (configuração), `POST|PATCH /api/admin/notificacoes/templates`, `POST /api/admin/notificacoes/enviar`
+- Configurações gerais do Admin: `PATCH /api/admin/configuracoes` (developer+)
 - Clube: config, indicações, vouchers e recompensas
 
-Toda correção exige `x-dev-actor-role` = `operator`, `developer` ou `owner` e gera `logs_alteracoes.acao = dev_console_correcao`. Equipe/RBAC, credenciais, rotação VAPID, configurações, contratos e carnês continuam bloqueados.
+Toda correção exige `x-dev-actor-role` = `operator`, `developer` ou `owner` (ou o mínimo indicado) e gera `logs_alteracoes.acao = dev_console_correcao`. As rotas e regras são as mesmas usadas pelo Admin. Continuam bloqueados: equipe/RBAC (o RPC auditado exige um colaborador real), credenciais de integrações e chaves VAPID (segredos), contratos/comissões e carnês.
 
 Códigos de recusa: `DEV_CONSOLE_M2M_READ_ONLY` (escrita desligada), `DEV_CONSOLE_MUTATION_NOT_ALLOWED` (rota fora da lista), `DEV_CONSOLE_ROLE_INSUFFICIENT` (papel insuficiente).
 

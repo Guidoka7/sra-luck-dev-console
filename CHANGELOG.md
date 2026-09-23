@@ -2,6 +2,8 @@
 
 ## 0.4.0 — Central de Problemas
 
+- controle do Admin pelo Dev Console: configuração da automação de notificações, templates, envio manual e configurações gerais do Admin (`configuracoes-sra.html`);
+
 - Central de Problemas (`problemas.html`, `/api/problemas`) cobrindo plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações;
 - correções pelo backend com registro fechado de ações, RBAC por ação, auditoria e verificação pós-correção;
 - correções seguras automáticas na varredura agendada e incidentes `source=problems`;
