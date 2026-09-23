@@ -97,9 +97,23 @@ Portanto APIs personalizadas não devem ser apresentadas como persistência pron
 
 Logo, a nova rotina `problems.autofix` não deve ser mostrada como scheduler comprovadamente ativo em produção.
 
-A auditoria de integração confirmou também que o conector M2M atual do `sra-luck-react` aceita somente `GET/HEAD`. Mutations técnicas recebem `403 DEV_CONSOLE_M2M_READ_ONLY`.
+A auditoria de integração confirmou que o deployment atual do `sra-luck-react` ainda aceita somente `GET/HEAD`. Há evidência real no banco do Dev Console: as últimas tentativas de POST para notificações e Web Push retornaram HTTP 403.
 
-Por isso, as ações que exigem `POST` no Sra Luck (rotinas de notificações, teste de integração e liberação de acesso ao app) foram retiradas da categoria “corrigível” na branch de evolução. Enquanto o upstream continuar read-only, o Dev Console deve mostrar essas ações como dependência bloqueada e direcionar ao módulo correspondente, sem fingir autocorreção.
+O contrato M2M restrito já foi implementado na `main` do `sra-luck-react`:
+
+- `7c953a28` — allowlist explícita de mutações seguras;
+- somente `POST /api/admin/notificacoes/automacao` com `verificar_atrasos` ou `verificar_momentos_especiais`;
+- somente `POST /api/admin/integrations/testar-conexao` para `gemini` ou `mercado_pago`;
+- `enviar_agora_todas`, clientes, financeiro, V46, configurações e demais mutações permanecem bloqueados;
+- payload validado campo a campo;
+- body máximo e Content-Type JSON exigidos;
+- 13 testes específicos do adapter M2M passando.
+
+O CI completo do `sra-luck-react` ficou verde após a correção auxiliar de tipagem no Clube (`8e08507d`): 43 arquivos de teste / 393 testes, TypeScript, build e audit de produção passaram.
+
+Porém o projeto Vercel de produção ainda aponta para um SHA antigo (`558a4864`). O mecanismo `.vercel-redeploy` foi atualizado em `4bd4edc8`, mas nenhum novo deployment foi criado automaticamente. Portanto o contrato de escrita NÃO deve ser tratado como disponível em produção até o deployment mudar para um SHA que contenha `7c953a28` ou descendente.
+
+Por isso, as ações que exigem POST continuam apresentadas no Dev Console como dependência bloqueada. Reabilitar somente após prova de deployment e teste real do upstream.
 
 A correção foi validada no GitHub Actions, run `35932021134`, com:
 
