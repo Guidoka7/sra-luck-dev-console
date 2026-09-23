@@ -15,6 +15,7 @@ async function load(){
  DC.$('commitMsg').textContent=c.message||gd.message||'Sem mensagem';
  const ciOk=latest&&latest.status==='completed'&&latest.conclusion==='success';
  const ciBad=latest&&latest.status==='completed'&&latest.conclusion==='failure';
+ const running=Boolean(latest&&(latest.status==='in_progress'||latest.status==='queued'));
  DC.$('ciState').textContent=!latest?'Sem leitura':ciOk?'OK':ciBad?'Falhou':latest.status==='in_progress'?'Executando':latest.conclusion||latest.status||'—';
  DC.$('ciState').className=ciOk?'dc-ok-text':ciBad?'dc-danger-text':'dc-warn-text';
  DC.$('deployState').textContent=vd.latest?.readyState||vd.latest?.state||'—';
