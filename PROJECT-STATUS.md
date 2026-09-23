@@ -59,16 +59,27 @@ Os “agentes” dessa etapa são, em grande parte, visões especializadas sobre
 
 ## Pendências comprovadas
 
-### CI da main
+### CI
 
-O último workflow da `main` está vermelho.
+A `main` continua com o último workflow vermelho no commit atualmente em produção, porque ainda usa o estado anterior da base.
 
-Falha registrada em `npm run check`:
+Falha registrada naquele commit:
 
 - `Componente obrigatório ausente: history`
 - `Componente obrigatório ausente: Dev Supabase provider`
 
-A branch mais nova já possui um validador refeito para a arquitetura consolidada, mas isso ainda não equivale a CI verde na `main`.
+A branch `claude/pensive-heisenberg-wr49m7` foi validada em execução real do GitHub Actions no run `35931735658`.
+
+Resultado comprovado:
+
+- `npm run check` — sucesso;
+- `23 HTML` validados;
+- `28 JS` validados;
+- `12/12 Functions`;
+- infraestrutura consolidada — PASS;
+- verificação básica de segredos em `78 arquivos` — PASS.
+
+O gatilho temporário usado apenas para provar o CI da branch foi removido após a execução. A promoção para a `main` ainda não foi feita.
 
 ### Migration 003
 
