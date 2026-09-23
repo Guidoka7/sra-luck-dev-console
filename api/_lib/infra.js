@@ -196,8 +196,8 @@ function runtimeMetrics(){
 }
 
 async function fetchVercel(){
- const token=String(process.env.VERCEL_ACCESS_TOKEN||process.env.VERCEL_TOKEN||'').trim(),project=String(process.env.VERCEL_PROJECT_ID||'').trim(),team=String(process.env.VERCEL_TEAM_ID||'').trim();
- if(!token||!project)return {source:'vercel',configured:false,ok:false,status:'not_configured',message:'Configure VERCEL_ACCESS_TOKEN e VERCEL_PROJECT_ID para histórico de deploys. Métricas avançadas de função permanecem no Vercel Observability até existir export/API configurada.'};
+ const token=String(process.env.DEV_VERCEL_ACCESS_TOKEN||'').trim(),project=String(process.env.VERCEL_PROJECT_ID||process.env.DEV_VERCEL_PROJECT_ID||'').trim(),team=String(process.env.DEV_VERCEL_TEAM_ID||'').trim();
+ if(!token||!project)return {source:'vercel',configured:false,ok:false,status:'not_configured',message:'Configure DEV_VERCEL_ACCESS_TOKEN; o projeto usa VERCEL_PROJECT_ID do runtime da Vercel ou DEV_VERCEL_PROJECT_ID como fallback. Métricas avançadas de função permanecem no Vercel Observability até existir export/API configurada.'};
  const p=new URLSearchParams({projectId:project,limit:'8'});if(team)p.set('teamId',team);
  try{
   const {response,ms}=await timedFetch(`https://api.vercel.com/v6/deployments?${p}`,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'}},12000);
