@@ -97,6 +97,17 @@ Portanto APIs personalizadas não devem ser apresentadas como persistência pron
 
 Logo, a nova rotina `problems.autofix` não deve ser mostrada como scheduler comprovadamente ativo em produção.
 
+A auditoria de integração confirmou também que o conector M2M atual do `sra-luck-react` aceita somente `GET/HEAD`. Mutations técnicas recebem `403 DEV_CONSOLE_M2M_READ_ONLY`.
+
+Por isso, as ações que exigem `POST` no Sra Luck (rotinas de notificações, teste de integração e liberação de acesso ao app) foram retiradas da categoria “corrigível” na branch de evolução. Enquanto o upstream continuar read-only, o Dev Console deve mostrar essas ações como dependência bloqueada e direcionar ao módulo correspondente, sem fingir autocorreção.
+
+A correção foi validada no GitHub Actions, run `35932021134`, com:
+
+- `23 HTML` — PASS;
+- `28 JS` — PASS;
+- `12/12 Functions` — PASS;
+- security-check em `78 arquivos` — PASS.
+
 ### Scheduler
 
 O `vercel.json` possui configuração de cron para `/api/infra-scan`.
