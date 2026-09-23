@@ -1,7 +1,8 @@
 const crypto=require('crypto');
-const { json, methodNotAllowed, requestId } = require('./_lib/http');
+const { json, body, methodNotAllowed, requestId, sameOrigin } = require('./_lib/http');
 const { requireSession } = require('./_lib/rbac');
 const { rest, audit } = require('./_lib/supabase');
+const { detect, applyAction, autoResolve, persistIncidents } = require('./_lib/problems');
 const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
 
 function safeEqual(a,b){
@@ -75,6 +76,26 @@ module.exports=async function handler(req,res){
  const mode=String(req.query?.mode||'scan');
  res.setHeader('x-request-id',requestId(req));
 
+ // Central de Problemas (rewrite /api/problemas). Mora aqui para não criar uma
+ // nova Vercel Function: o plano Hobby limita o total de Functions.
+ if(mode==='problems'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   try{return json(res,200,await detect(actor))}
+   catch(e){return json(res,503,{erro:'Não foi possível montar a Central de Problemas agora.',codigo:'PROBLEMS_UNAVAILABLE',detalhe:e?.message||null})}
+  }
+  if(req.method==='POST'){
+   if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   const problemaId=String(input?.problema||'').slice(0,200),actionId=String(input?.acao||'').slice(0,80);
+   if(!problemaId||!actionId)return json(res,400,{erro:'Informe o problema e a correção.',codigo:'PROBLEM_INPUT_INVALID'});
+   try{const r=await applyAction({actor,problemaId,actionId,params:input?.params||null});return json(res,r.status,r.body)}
+   catch(e){return json(res,500,{erro:'Falha ao aplicar a correção.',codigo:'PROBLEM_FIX_FAILED',detalhe:e?.message||null})}
+  }
+  return methodNotAllowed(res,['GET','POST']);
+ }
+
  if(mode!=='scan'){
   if(req.method!=='GET')return methodNotAllowed(res,['GET']);
   const actor=await requireSession(req,res,'infrastructure.view');if(!actor)return;
@@ -131,8 +152,15 @@ module.exports=async function handler(req,res){
  try{
   const overview=await getInfraOverview({includeLogs:true});
   const result=await persistScan(overview);
-  if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:result});
-  return json(res,200,{ok:true,result,overall:overview.overall,signals:overview.signals});
+  // A varredura agendada também roda a Central de Problemas: aplica só as
+  // correções seguras (L2) e abre/mitiga incidentes dos problemas restantes.
+  let problems=null;
+  try{
+   if(cron)problems=await autoResolve();
+   else{const found=await detect(actor);problems={detectados:found.resumo.total,incidents:await persistIncidents(found,overview.generatedAt)}}
+  }catch(e){problems={erro:e?.message||'Falha na Central de Problemas.'}}
+  if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:{...result,problems}});
+  return json(res,200,{ok:true,result,problems,overall:overview.overall,signals:overview.signals});
  }catch(e){
   return json(res,500,{erro:'Falha ao executar o Infrastructure & Resource Guardian.',codigo:'INFRA_SCAN_FAILED',detalhe:e?.message||null});
  }

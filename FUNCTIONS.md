@@ -62,6 +62,19 @@ As páginas operacionais continuam preparadas para:
 - Equipe/RBAC do sistema principal;
 - Código/Releases.
 
+## Central de Problemas
+
+`problemas.html` junta em uma lista única o que está falhando no Admin, no App da cliente, nas notificações, na V46, no financeiro e nas integrações, com a correção ao lado:
+
+- **correção segura (L2)**: executa na hora e roda sozinha na varredura diária;
+- **correção com confirmação (L3)**: altera dados de clientes; pede clique e confirmação;
+- **pacote técnico / issue**: bugs de código saem com rota, código, request IDs e amostras sem dados pessoais;
+- **link**: quando a decisão é humana (V46, validação financeira), leva para a tela certa.
+
+Depois de cada correção, o console reconsulta as fontes e informa se o problema foi resolvido de fato.
+
+Desempenho do App (memória, travamentos e carregamento lento) chega pelo monitoramento de erros do Sra Luck com os códigos `APP_MEMORY_PRESSURE`, `APP_MAIN_THREAD_BLOCKED` e `APP_SLOW_LOAD`.
+
 ## Próxima evolução
 
 Consultar `AGENTS-ROADMAP.md`.

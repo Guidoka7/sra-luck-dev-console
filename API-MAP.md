@@ -43,6 +43,16 @@ Exemplos:
 
 A autorização real do Sra Luck continua existindo do outro lado; o RBAC do Dev Console é uma camada adicional, não substituta.
 
+## Central de Problemas
+
+- `GET /api/problemas` — detecta problemas em plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações (`monitoring.view`).
+- `POST /api/problemas` — `{ problema, acao, params? }` aplica uma correção do registro fechado e verifica se o problema sumiu. A permissão depende da ação:
+  - `notificacoes.verificar_atrasos` / `notificacoes.verificar_vencimentos` → `notifications.manage` (seguro, L2)
+  - `integracoes.testar` → `integrations.manage` (seguro, L2)
+  - `app.liberar_acesso` → `app.correct` (confirmação humana, L3, até 25 clientes por vez)
+
+Mora em `api/infra-scan.js` (`mode=problems`) por causa do limite de Functions do plano Hobby.
+
 ## Infraestrutura & recursos
 
 ### Dev Console

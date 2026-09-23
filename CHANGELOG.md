@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — Central de Problemas
+
+- Central de Problemas (`problemas.html`, `/api/problemas`) cobrindo plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações;
+- correções pelo backend com registro fechado de ações, RBAC por ação, auditoria e verificação pós-correção;
+- correções seguras automáticas na varredura agendada e incidentes `source=problems`;
+- desempenho do App (memória, travamentos, carregamento) como problemas acompanháveis;
+- mensagens claras quando o Sra Luck recusa correções (somente leitura, rota fora da lista, papel);
+- validador atualizado para rotas consolidadas e limite de Functions da Vercel.
+
 ## 0.3.0 — Repo-ready
 
 - navegação operacional simplificada;
