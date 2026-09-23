@@ -17,7 +17,8 @@ function permissionFor(path,method){
  if(path.startsWith('/api/admin/configuracoes'))return read?'monitoring.view':'agents.configure';
  if(path.startsWith('/api/admin/visao-geral'))return 'monitoring.view';
  if(path.startsWith('/api/admin/clientes'))return read?'app.inspect':'app.correct';
- return 'monitoring.view';
+ if(path.startsWith('/api/admin/home-campanhas'))return read?'app.inspect':'app.correct';
+ return read?'monitoring.view':'agents.configure';
 }
 function safePath(value){
  const p=String(value||'');if(!p.startsWith('/api/'))return null;

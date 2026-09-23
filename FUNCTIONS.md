@@ -83,6 +83,10 @@ Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funçõ
 - **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
 - **Integrações** (`integracoes.html`): testes de conexão e teste/sincronização do RD Station. Credenciais e chaves VAPID continuam sendo editadas no Admin.
 
+## Carrossel do App
+
+`carrossel.html` (Admin Sra Luck → Carrossel) mostra os cartões da Início na ordem em que aparecem, com prévia nas cores reais do tema. Dá para ligar/desligar, subir/descer, editar chamada, título, destaque, descrição, botão, destino, tema e ilustração, criar cartões novos (copiando o visual de um existente) e restaurar o original. Cartões de campanha comercial continuam travados até existir campanha real. Depende do PR do carrossel no `sra-luck-react` e da `migration_083`.
+
 ## Engenharia
 
 `engenharia.html` junta os dois repositórios e os dois projetos Vercel:
