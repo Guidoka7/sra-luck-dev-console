@@ -2,7 +2,9 @@ name: Validate Dev Console
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - claude/pensive-heisenberg-wr49m7
   pull_request:
 
 permissions:
