@@ -21,6 +21,38 @@
     {
       "source": "/api/auth/reset",
       "destination": "/api/auth-reset"
+    },
+    {
+      "source": "/api/dev-health",
+      "destination": "/api/dev-ready?mode=health"
+    },
+    {
+      "source": "/api/infra-cloudflare",
+      "destination": "/api/infra-scan?mode=cloudflare"
+    },
+    {
+      "source": "/api/infra-dev-supabase",
+      "destination": "/api/infra-scan?mode=dev-supabase"
+    },
+    {
+      "source": "/api/infra-history",
+      "destination": "/api/infra-scan?mode=history"
+    },
+    {
+      "source": "/api/infra-overview",
+      "destination": "/api/infra-scan?mode=overview"
+    },
+    {
+      "source": "/api/infra-runtime",
+      "destination": "/api/infra-scan?mode=runtime"
+    },
+    {
+      "source": "/api/infra-supabase",
+      "destination": "/api/infra-scan?mode=supabase"
+    },
+    {
+      "source": "/api/infra-vercel",
+      "destination": "/api/infra-scan?mode=vercel"
     }
   ],
   "headers": [
