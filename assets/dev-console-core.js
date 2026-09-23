@@ -17,7 +17,7 @@
  let requestSeq=0,inflight=0;
  const apiHistory=[];
  let currentUser=null;
- const localApiPrefixes=['/api/auth/','/api/dev-','/api/github-','/api/infra-','/api/problemas','/api/sra-proxy'];
+ const localApiPrefixes=['/api/auth/','/api/dev-','/api/github-','/api/infra-','/api/problemas','/api/custom-apis','/api/sra-proxy'];
  const connectorMessages={DEV_CONSOLE_M2M_READ_ONLY:'O Sra Luck ainda está em modo somente leitura para o Dev Console. Ative DEV_CONSOLE_M2M_WRITE=1 na Vercel do sra-luck-react.',DEV_CONSOLE_MUTATION_NOT_ALLOWED:'Esta correção não está liberada no conector do Sra Luck.',DEV_CONSOLE_ROLE_INSUFFICIENT:'Seu papel no Dev Console não permite esta correção.'};
  function isLocalApi(url){return localApiPrefixes.some(p=>String(url).startsWith(p))}
  function isSraApi(url){const u=String(url||'');return u.startsWith('/api/')&&!isLocalApi(u)}

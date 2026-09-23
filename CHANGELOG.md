@@ -5,6 +5,7 @@
 - navegação por áreas (Admin Sra Luck com submenu), páginas duplicadas removidas, Engenharia no lugar de Código & Releases;
 - saúde de cada função espelhada do Admin na Visão Geral e na Central;
 - histórico de acessos da cliente no drawer e página Atividade do Admin;
+- Integrações reformuladas com logos oficiais, filtros por grupo, detalhes por provedor, histórico e APIs personalizadas monitoradas;
 
 - controle do Admin pelo Dev Console: configuração da automação de notificações, templates, envio manual e configurações gerais do Admin (`configuracoes-sra.html`);
 

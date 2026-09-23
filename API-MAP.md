@@ -53,6 +53,13 @@ A autorização real do Sra Luck continua existindo do outro lado; o RBAC do Dev
 
 Mora em `api/infra-scan.js` (`mode=problems`) por causa do limite de Functions do plano Hobby.
 
+## APIs personalizadas
+
+- `GET /api/custom-apis` (`?check=1` testa todas) — `integrations.view`
+- `POST /api/custom-apis` `{ action: save|toggle|delete, ... }` — `integrations.manage`; `{ action: test, id }` — `integrations.view`
+
+Só HTTPS público (endereços privados/internos bloqueados, sem seguir redirecionamentos). O segredo opcional vem de uma variável de ambiente `CUSTOM_API_*`; nada sensível fica no banco. Tabela: `supabase/003_custom_apis.sql`.
+
 ## Infraestrutura & recursos
 
 ### Dev Console

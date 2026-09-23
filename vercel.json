@@ -68,6 +68,10 @@
     {
       "source": "/api/problemas",
       "destination": "/api/infra-scan?mode=problems"
+    },
+    {
+      "source": "/api/custom-apis",
+      "destination": "/api/infra-scan?mode=custom-apis"
     }
   ],
   "headers": [

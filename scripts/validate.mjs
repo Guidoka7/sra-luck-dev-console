@@ -38,7 +38,7 @@ for(const [label,ok] of must)if(!ok)errors.push(`Componente obrigatório ausente
 // Rotas consolidadas em infra-scan.js: o plano Hobby da Vercel limita o número de Functions.
 const vercel=JSON.parse(fs.readFileSync(path.join(root,'vercel.json'),'utf8'));
 const rewrites=new Map((vercel.rewrites||[]).map(r=>[r.source,r.destination]));
-for(const [source,mode] of [['/api/infra-history','history'],['/api/infra-dev-supabase','dev-supabase'],['/api/problemas','problems']]){
+for(const [source,mode] of [['/api/infra-history','history'],['/api/infra-dev-supabase','dev-supabase'],['/api/problemas','problems'],['/api/custom-apis','custom-apis']]){
   if(rewrites.get(source)!==`/api/infra-scan?mode=${mode}`)errors.push(`Rewrite obrigatório ausente: ${source} -> /api/infra-scan?mode=${mode}`);
 }
 const MAX_FUNCTIONS=12;

@@ -3,6 +3,8 @@ const { json, body, methodNotAllowed, requestId, sameOrigin } = require('./_lib/
 const { requireSession } = require('./_lib/rbac');
 const { rest, audit } = require('./_lib/supabase');
 const { detect, applyAction, autoResolve, persistIncidents } = require('./_lib/problems');
+const customApis = require('./_lib/custom-apis');
+const { hasPermission } = require('./_lib/rbac');
 const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
 
 function safeEqual(a,b){
@@ -94,6 +96,40 @@ module.exports=async function handler(req,res){
    catch(e){return json(res,500,{erro:'Falha ao aplicar a correção.',codigo:'PROBLEM_FIX_FAILED',detalhe:e?.message||null})}
   }
   return methodNotAllowed(res,['GET','POST']);
+ }
+
+ // APIs personalizadas (rewrite /api/custom-apis).
+ if(mode==='custom-apis'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'integrations.view');if(!actor)return;
+   try{
+    if(String(req.query?.check||'')==='1'){const r=await customApis.checkAll();return json(res,200,{ok:true,disponivel:r.available,apis:r.apis})}
+    return json(res,200,{ok:true,disponivel:true,apis:await customApis.list()});
+   }catch(e){return json(res,200,{ok:true,disponivel:false,apis:[],erro:'Tabela dev_custom_apis ainda não criada (aplique supabase/003_custom_apis.sql).'})}
+  }
+  if(req.method!=='POST')return methodNotAllowed(res,['GET','POST']);
+  if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+  const actor=await requireSession(req,res,'integrations.view');if(!actor)return;
+  let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+  const action=String(input?.action||'');const id=String(input?.id||'').replace(/[^0-9a-f-]/gi,'').slice(0,36);
+  const manage=['save','delete','toggle'].includes(action);
+  if(manage&&!hasPermission(actor,'integrations.manage'))return json(res,403,{erro:'Seu perfil não pode alterar APIs personalizadas.',codigo:'DEV_PERMISSION_DENIED',permission:'integrations.manage'});
+  try{
+   if(action==='save'){
+    const {errors,row}=customApis.validate(input);if(errors.length)return json(res,400,{erro:errors.join(' '),codigo:'CUSTOM_API_INVALID'});
+    const saved=id?await rest(`dev_custom_apis?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({...row,updated_at:new Date().toISOString()})}):await rest('dev_custom_apis',{method:'POST',body:JSON.stringify({...row,created_by:actor.id})});
+    const api=saved?.[0];if(!api)return json(res,404,{erro:'API não encontrada.'});
+    await audit({actor_user_id:actor.id,action:id?'custom_api.update':'custom_api.create',resource:'custom_api',resource_id:api.id,details:{name:api.name,host:new URL(api.base_url).host}});
+    return json(res,200,{ok:true,api:await customApis.checkAndStore(api)});
+   }
+   if(!id)return json(res,400,{erro:'Informe a API.'});
+   const found=(await rest(`dev_custom_apis?id=eq.${id}&select=${customApis.FIELDS}&limit=1`,{method:'GET'}))?.[0];
+   if(!found)return json(res,404,{erro:'API não encontrada.'});
+   if(action==='test')return json(res,200,{ok:true,api:await customApis.checkAndStore(found)});
+   if(action==='toggle'){const r=await rest(`dev_custom_apis?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({enabled:!found.enabled,updated_at:new Date().toISOString()})});await audit({actor_user_id:actor.id,action:'custom_api.toggle',resource:'custom_api',resource_id:id,details:{enabled:!found.enabled}});return json(res,200,{ok:true,api:r?.[0]})}
+   if(action==='delete'){await rest(`dev_custom_apis?id=eq.${id}`,{method:'DELETE'});await audit({actor_user_id:actor.id,action:'custom_api.delete',resource:'custom_api',resource_id:id,details:{name:found.name}});return json(res,200,{ok:true})}
+   return json(res,400,{erro:'Ação desconhecida.'});
+  }catch(e){return json(res,503,{erro:'Não foi possível salvar. Confirme se supabase/003_custom_apis.sql foi aplicado.',detalhe:e?.message||null})}
  }
 
  if(mode!=='scan'){

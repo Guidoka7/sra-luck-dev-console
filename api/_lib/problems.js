@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { rest, audit } = require('./supabase');
 const { hasPermission } = require('./rbac');
+const customApis = require('./custom-apis');
 
 // Central de Problemas: detecta falhas do Admin, App da cliente, notificações,
 // V46, financeiro e integrações usando somente as APIs oficiais do Sra Luck, e
@@ -276,8 +277,15 @@ function detectIntegrations(data, out) {
   }
 }
 
+function detectCustomApis(apis, out) {
+  for (const a of apis || []) {
+    if (!a.enabled || a.last_ok !== false) continue;
+    out.push(problem({ id: `integracoes:custom:${a.id}`, dominio: 'integracoes', tipo: 'infra', severidade: 'high', titulo: `API "${a.name}" fora do ar`, descricao: a.last_error || `Resposta HTTP ${a.last_status}.`, impacto: a.description || 'Funções que dependem desta API podem falhar.', evidencias: [{ label: 'Endereço', valor: a.base_url + a.health_path }, { label: 'Latência', valor: a.last_ms != null ? `${a.last_ms} ms` : '—' }], acoes: [{ id: 'link', label: 'Abrir integrações', tipo: 'link', href: 'integracoes.html' }] }));
+  }
+}
+
 async function detect(actor) {
-  const { data, fontes } = await collect(actor);
+  const [{ data, fontes }, custom] = await Promise.all([collect(actor), customApis.checkAll().catch(() => ({ available: false, apis: [] }))]);
   const problemas = [];
   detectFunctions(fontes, problemas);
   detectPlatform(data, fontes, problemas);
@@ -287,6 +295,7 @@ async function detect(actor) {
   detectV46(data, problemas);
   detectFinance(data, problemas);
   detectIntegrations(data, problemas);
+  detectCustomApis(custom.apis, problemas);
   problemas.sort((a, b) => (SEVERITY_RANK[a.severidade] - SEVERITY_RANK[b.severidade]) || (b.ocorrencias - a.ocorrencias));
   const count = (s) => problemas.filter(p => p.severidade === s).length;
   const configurado = Boolean(sraConfig().token);
@@ -295,6 +304,7 @@ async function detect(actor) {
     funcoes: { total: fontes.length, ok: fontes.filter(f => f.ok).length, falhando: fontes.filter(f => !f.ok && !f.naoConfigurado).length, naoConfiguradas: fontes.filter(f => f.naoConfigurado).length },
     resumo: { total: problemas.length, critical: count('critical'), high: count('high'), warning: count('warning'), info: count('info'), corrigiveis: problemas.filter(p => p.acoes.some(a => a.tipo === 'seguro' || a.tipo === 'confirmar')).length, fontesComFalha: fontes.filter(f => !f.ok && !f.naoConfigurado).length },
     fontes, problemas,
+    apisPersonalizadas: { disponivel: custom.available, total: custom.apis.length, falhando: custom.apis.filter(a => a.enabled && a.last_ok === false).length },
   };
 }
 
