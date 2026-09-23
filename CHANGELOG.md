@@ -2,6 +2,10 @@
 
 ## 0.4.0 — Central de Problemas
 
+- navegação por áreas (Admin Sra Luck com submenu), páginas duplicadas removidas, Engenharia no lugar de Código & Releases;
+- saúde de cada função espelhada do Admin na Visão Geral e na Central;
+- histórico de acessos da cliente no drawer e página Atividade do Admin;
+
 - controle do Admin pelo Dev Console: configuração da automação de notificações, templates, envio manual e configurações gerais do Admin (`configuracoes-sra.html`);
 
 - Central de Problemas (`problemas.html`, `/api/problemas`) cobrindo plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações;

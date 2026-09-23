@@ -83,6 +83,13 @@ Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funçõ
 - **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
 - **Integrações** (`integracoes.html`): testes de conexão e teste/sincronização do RD Station. Credenciais e chaves VAPID continuam sendo editadas no Admin.
 
+## Histórico de acessos
+
+Depende do PR de monitoramento de acessos no `sra-luck-react` (tabela `monitoramento_acessos`).
+
+- **Clientes & App → drawer da cliente**: uso nos últimos 7 dias, telas mais vistas, aparelhos (celular/computador, sistema, navegador), app instalado ou só navegador, push, linha do tempo de cada aba aberta e erros que aconteceram no app dela.
+- **Atividade do Admin** (`admin-atividade.html`): por colaborador, telas abertas, último acesso, erros e alterações; feed recente e telas mais usadas, com período de 24h, 7 ou 30 dias.
+
 ## Próxima evolução
 
 Consultar `AGENTS-ROADMAP.md`.
