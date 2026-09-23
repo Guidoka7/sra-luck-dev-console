@@ -48,28 +48,42 @@ async function sraFetch(path, { method = 'GET', body, actor, requestId, timeoutM
   }
 }
 
+// Cada fonte é também uma função espelhada do Admin: se a rota falha, a
+// tela correspondente do Dev Console (e do Admin) está quebrada.
+function monthRange() {
+  const today = new Date().toISOString().slice(0, 10);
+  return `inicio=${today.slice(0, 7)}-01&fim=${today}`;
+}
 const SOURCES = [
-  ['ready', 'Sra Luck · prontidão', '/api/ready'],
-  ['diagnostico', 'Diagnóstico do banco', '/api/admin/diagnostico'],
-  ['erros', 'Erros do Admin e App', '/api/admin/monitoramento-erros?limite=300'],
-  ['storage', 'Storage de arquivos', '/api/admin/monitoramento-storage'],
-  ['notificacoes', 'Notificações', '/api/admin/notificacoes/automacao'],
-  ['vapid', 'Web Push (VAPID)', '/api/admin/integrations/web-push/vapid'],
-  ['app', 'App da cliente', '/api/admin/monitoramento-app'],
-  ['v46', 'Jornada V46', '/api/admin/central/visao-geral'],
-  ['validacoes', 'Validações financeiras', '/api/admin/financeiro/validacoes'],
-  ['integracoes', 'Integrações', '/api/admin/integrations/status'],
+  ['ready', 'Prontidão da API', '/api/ready', 'plataforma'],
+  ['diagnostico', 'Diagnóstico do banco', '/api/admin/diagnostico', 'plataforma'],
+  ['storage', 'Storage de arquivos', '/api/admin/monitoramento-storage', 'plataforma'],
+  ['erros', 'Erros do Admin e App', '/api/admin/monitoramento-erros?limite=300', 'plataforma'],
+  ['visaoGeral', 'Visão geral do Admin', '/api/admin/visao-geral', 'admin'],
+  ['configuracoes', 'Configurações do Admin', '/api/admin/configuracoes', 'admin'],
+  ['staff', 'Equipe e permissões', '/api/admin/staff', 'admin'],
+  ['v46', 'Jornada V46', '/api/admin/central/visao-geral', 'v46'],
+  ['previsoes', 'Previsão de liberações', '/api/admin/previsao-liberacoes', 'v46'],
+  ['validacoes', 'Validações financeiras', '/api/admin/financeiro/validacoes', 'financeiro'],
+  ['financeiroResumo', 'Resumo financeiro', () => `/api/admin/financeiro/resumo?${monthRange()}`, 'financeiro'],
+  ['app', 'App da cliente', '/api/admin/monitoramento-app', 'app'],
+  ['clube', 'Clube de vantagens', '/api/admin/credit-ops/club/overview', 'clube'],
+  ['recompensas', 'Catálogo de recompensas', '/api/admin/credit-ops/rewards', 'clube'],
+  ['notificacoes', 'Notificações', '/api/admin/notificacoes/automacao', 'notificacoes'],
+  ['vapid', 'Web Push (VAPID)', '/api/admin/integrations/web-push/vapid', 'notificacoes'],
+  ['integracoes', 'Integrações', '/api/admin/integrations/status', 'integracoes'],
 ];
 
 async function collect(actor) {
   const reader = { id: actor?.id || 'problem-center', role: 'viewer' };
-  const results = await Promise.all(SOURCES.map(([, , path]) => sraFetch(path, { actor: reader })));
+  const paths = SOURCES.map(([, , path]) => (typeof path === 'function' ? path() : path));
+  const results = await Promise.all(paths.map((path) => sraFetch(path, { actor: reader })));
   const data = {};
-  const fontes = SOURCES.map(([id, label, path], i) => {
+  const fontes = SOURCES.map(([id, label, , area], i) => {
     const r = results[i];
     // Storage e ready respondem 503 com corpo útil quando degradados.
     data[id] = r.data && (r.ok || r.status === 503) ? r.data : null;
-    return { id, label, path, ok: r.ok, status: r.status, ms: r.ms ?? null, erro: r.erro || null, naoConfigurado: Boolean(r.notConfigured) };
+    return { id, label, area, path: paths[i].split('?')[0], ok: r.ok, status: r.status, ms: r.ms ?? null, erro: r.erro || null, naoConfigurado: Boolean(r.notConfigured) };
   });
   return { data, fontes };
 }
@@ -86,6 +100,15 @@ function one(value) { return Array.isArray(value) ? value[0] : value; }
 
 function problem(p) {
   return { ocorrencias: 1, evidencias: [], acoes: [], ...p, fingerprint: p.fingerprint || p.id };
+}
+
+const HANDLED_BY_DETECTOR = new Set(['ready', 'storage']);
+function detectFunctions(fontes, out) {
+  for (const f of fontes) {
+    if (f.ok || f.naoConfigurado || HANDLED_BY_DETECTOR.has(f.id)) continue;
+    const auth = f.status === 401 || f.status === 403;
+    out.push(problem({ id: `funcao:${f.id}`, dominio: f.area === 'v46' || f.area === 'financeiro' || f.area === 'app' || f.area === 'notificacoes' || f.area === 'integracoes' ? f.area : 'admin', tipo: auth ? 'configuracao' : 'codigo', severidade: auth ? 'warning' : 'high', titulo: `Função "${f.label}" ${auth ? 'sem acesso pelo conector' : 'falhando'}`, descricao: `${f.path} respondeu ${f.status ? 'HTTP ' + f.status : 'sem resposta'}: ${f.erro || 'erro desconhecido'}.`, impacto: auth ? 'O Dev Console não consegue ler esta área; verifique token e allowlist do conector.' : 'A tela correspondente do Admin e do Dev Console pode estar quebrada.', evidencias: [{ label: 'Latência', valor: f.ms != null ? `${f.ms} ms` : '—' }], acoes: [{ id: 'link', label: 'Ver conexões', tipo: 'link', href: 'conexoes.html' }] }));
+  }
 }
 
 function detectPlatform(data, fontes, out) {
@@ -202,6 +225,11 @@ function detectApp(data, out) {
   if (incompletas.length) {
     out.push(problem({ id: 'app:liberadas-cadastro-incompleto', dominio: 'app', tipo: 'dados', severidade: 'warning', titulo: 'App liberado com cadastro incompleto', descricao: `${incompletas.length} cliente(s) com acesso liberado, mas sem algum requisito obrigatório.`, impacto: 'Telas do app podem quebrar ou mostrar dados vazios.', ocorrencias: incompletas.length, evidencias: incompletas.slice(0, 8).map(c => ({ label: c.nome || c.id, valor: `falta: ${(c.appAccess.missing || []).join(', ')}` })), acoes: [{ id: 'link', label: 'Abrir Jornada V46', tipo: 'link', href: 'jornada-v46.html' }] }));
   }
+  const cadastro = cards.filter(c => c.ativo && !c.acessoAppLiberado && c.appAccess && !c.appAccess.canRelease);
+  if (cadastro.length) {
+    const nomes = { nome: 'nome', cpf: 'CPF válido', data_nascimento: 'data de nascimento', financeiro: 'parcelas' };
+    out.push(problem({ id: 'app:cadastro-incompleto', dominio: 'app', tipo: 'dados', severidade: 'info', titulo: 'Clientes com cadastro incompleto para o app', descricao: `${cadastro.length} cliente(s) ativas não podem receber acesso ao app porque falta algum dado obrigatório.`, impacto: 'Essas clientes não conseguem entrar no app até o cadastro ser completado no Admin.', ocorrencias: cadastro.length, evidencias: cadastro.slice(0, 8).map(c => ({ label: c.nome || c.id, valor: `falta: ${(c.appAccess.missing || []).map(m => nomes[m] || m).join(', ')}` })), acoes: [{ id: 'link', label: 'Abrir Jornada V46', tipo: 'link', href: 'jornada-v46.html' }] }));
+  }
   const app = data.app;
   if (app?.resumo) {
     const liberadas = new Set(cards.filter(c => c.acessoAppLiberado).map(c => c.id));
@@ -251,6 +279,7 @@ function detectIntegrations(data, out) {
 async function detect(actor) {
   const { data, fontes } = await collect(actor);
   const problemas = [];
+  detectFunctions(fontes, problemas);
   detectPlatform(data, fontes, problemas);
   detectBugs(data, problemas);
   detectNotifications(data, problemas);
@@ -263,6 +292,7 @@ async function detect(actor) {
   const configurado = Boolean(sraConfig().token);
   return {
     ok: true, geradoEm: new Date().toISOString(), configurado,
+    funcoes: { total: fontes.length, ok: fontes.filter(f => f.ok).length, falhando: fontes.filter(f => !f.ok && !f.naoConfigurado).length, naoConfiguradas: fontes.filter(f => f.naoConfigurado).length },
     resumo: { total: problemas.length, critical: count('critical'), high: count('high'), warning: count('warning'), info: count('info'), corrigiveis: problemas.filter(p => p.acoes.some(a => a.tipo === 'seguro' || a.tipo === 'confirmar')).length, fontesComFalha: fontes.filter(f => !f.ok && !f.naoConfigurado).length },
     fontes, problemas,
   };
