@@ -4,6 +4,7 @@ const { requireSession } = require('./_lib/rbac');
 const { rest, audit } = require('./_lib/supabase');
 const { detect, applyAction, autoResolve, persistIncidents } = require('./_lib/problems');
 const customApis = require('./_lib/custom-apis');
+const agents = require('./_lib/agents');
 const { hasPermission } = require('./_lib/rbac');
 const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
 
@@ -94,6 +95,25 @@ module.exports=async function handler(req,res){
    if(!problemaId||!actionId)return json(res,400,{erro:'Informe o problema e a correção.',codigo:'PROBLEM_INPUT_INVALID'});
    try{const r=await applyAction({actor,problemaId,actionId,params:input?.params||null});return json(res,r.status,r.body)}
    catch(e){return json(res,500,{erro:'Falha ao aplicar a correção.',codigo:'PROBLEM_FIX_FAILED',detalhe:e?.message||null})}
+  }
+  return methodNotAllowed(res,['GET','POST']);
+ }
+
+ // Agentes (rewrite /api/agentes): resumo em linguagem simples e análise por IA.
+ if(mode==='agents'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   try{return json(res,200,await agents.briefing(actor))}
+   catch(e){return json(res,503,{erro:'Os agentes não conseguiram montar o resumo agora.',codigo:'AGENTS_UNAVAILABLE',detalhe:e?.message||null})}
+  }
+  if(req.method==='POST'){
+   if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   if(input?.action!=='analisar')return json(res,400,{erro:'Ação desconhecida.'});
+   const r=await agents.analisarComIA(actor,String(input?.problema||'').slice(0,200));
+   if(r.ok)await audit({actor_user_id:actor.id,action:'agents.ai_analysis',resource:'problems',resource_id:String(input.problema).slice(0,200),details:{modelo:r.modelo}});
+   const {status,...payload}=r;return json(res,status,payload);
   }
   return methodNotAllowed(res,['GET','POST']);
  }

@@ -83,6 +83,17 @@ Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funçõ
 - **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
 - **Integrações** (`integracoes.html`): testes de conexão e teste/sincronização do RD Station. Credenciais e chaves VAPID continuam sendo editadas no Admin.
 
+## Agentes
+
+`agentes.html` reúne sete agentes (Saúde, Bugs, App, Notificações, Jornada & Financeiro, Integrações e Infraestrutura). Cada um:
+
+- usa os detectores da Central de Problemas (regras próprias, custo zero);
+- explica cada achado em linguagem simples: **o que aconteceu, por que importa e como resolver**;
+- mostra as boas notícias (ex.: todas as funções respondendo, clientes usando o app, notificações entregues);
+- aplica sozinho, na varredura agendada, só as correções seguras; o resto fica a um clique (ou leva para a tela certa).
+
+Análise por IA é opcional e gratuita: com `GEMINI_API_KEY` (Google AI Studio), o botão "Pedir análise da IA" manda **apenas dados técnicos** do problema (rota, código, mensagem, amostras) e devolve causa provável e passos de correção. Nomes e dados de clientes nunca são enviados.
+
 ## Histórico de acessos
 
 Depende do PR de monitoramento de acessos no `sra-luck-react` (tabela `monitoramento_acessos`).

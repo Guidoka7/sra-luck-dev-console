@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { rest, audit } = require('./supabase');
 const { hasPermission } = require('./rbac');
 const customApis = require('./custom-apis');
+const { explicar } = require('./explain');
 
 // Central de Problemas: detecta falhas do Admin, App da cliente, notificações,
 // V46, financeiro e integrações usando somente as APIs oficiais do Sra Luck, e
@@ -284,6 +285,35 @@ function detectCustomApis(apis, out) {
   }
 }
 
+// Números do dia que viram "boas notícias" (ou contexto) no feed dos agentes.
+function sinaisPositivos(data, fontes, custom) {
+  const ativas = fontes.filter((f) => !f.naoConfigurado);
+  const eventos = data.erros?.eventos || [];
+  const logs = (data.notificacoes?.logs || []).filter((l) => ageMs(l.created_at) <= DAY);
+  const resumoApp = data.app?.resumo || [];
+  const filas = data.v46?.filas || {};
+  return {
+    funcoesOk: ativas.filter((f) => f.ok).length,
+    funcoesTotal: ativas.length,
+    latenciaMedia: ativas.length ? Math.round(ativas.reduce((s, f) => s + (f.ms || 0), 0) / ativas.length) : null,
+    erros24h: data.erros ? eventos.filter((e) => ageMs(e.criado_em) <= DAY && e.nivel !== 'info').length : null,
+    erros1h: data.erros ? eventos.filter((e) => ageMs(e.criado_em) <= HOUR && e.nivel !== 'info').length : null,
+    pushEnviadas24h: data.notificacoes ? logs.reduce((s, l) => s + (Number(l.push_enviadas) || 0), 0) : null,
+    pushFalhas24h: data.notificacoes ? logs.reduce((s, l) => s + (Number(l.push_falhas) || 0), 0) : null,
+    notificacoes24h: data.notificacoes ? logs.length : null,
+    pushInscritos: data.notificacoes ? Number(data.notificacoes.pushSubscriptions) || 0 : null,
+    clientesApp: data.app ? resumoApp.length : null,
+    clientesAtivas7d: data.app ? resumoApp.filter((r) => ageMs(r.last_access_at) <= 7 * DAY).length : null,
+    clientesHoje: data.app ? resumoApp.filter((r) => ageMs(r.last_access_at) <= DAY).length : null,
+    appInstalado: data.app ? resumoApp.filter((r) => r.is_pwa_installed).length : null,
+    jornada: data.v46 ? Object.fromEntries(Object.entries(filas).map(([k, v]) => [k, (v || []).length])) : null,
+    validacoesPendentes: data.validacoes ? (data.validacoes.itens || []).length : null,
+    integracoesConectadas: data.integracoes ? (data.integracoes.integracoes || []).filter((i) => i.conexaoLiveVerificada).length : null,
+    apisNoAr: custom.apis.filter((a) => a.enabled && a.last_ok).length,
+    apisTotal: custom.apis.filter((a) => a.enabled).length,
+  };
+}
+
 async function detect(actor) {
   const [{ data, fontes }, custom] = await Promise.all([collect(actor), customApis.checkAll().catch(() => ({ available: false, apis: [] }))]);
   const problemas = [];
@@ -296,6 +326,7 @@ async function detect(actor) {
   detectFinance(data, problemas);
   detectIntegrations(data, problemas);
   detectCustomApis(custom.apis, problemas);
+  for (const p of problemas) p.explicacao = explicar(p);
   problemas.sort((a, b) => (SEVERITY_RANK[a.severidade] - SEVERITY_RANK[b.severidade]) || (b.ocorrencias - a.ocorrencias));
   const count = (s) => problemas.filter(p => p.severidade === s).length;
   const configurado = Boolean(sraConfig().token);
@@ -304,6 +335,7 @@ async function detect(actor) {
     funcoes: { total: fontes.length, ok: fontes.filter(f => f.ok).length, falhando: fontes.filter(f => !f.ok && !f.naoConfigurado).length, naoConfiguradas: fontes.filter(f => f.naoConfigurado).length },
     resumo: { total: problemas.length, critical: count('critical'), high: count('high'), warning: count('warning'), info: count('info'), corrigiveis: problemas.filter(p => p.acoes.some(a => a.tipo === 'seguro' || a.tipo === 'confirmar')).length, fontesComFalha: fontes.filter(f => !f.ok && !f.naoConfigurado).length },
     fontes, problemas,
+    sinais: sinaisPositivos(data, fontes, custom),
     apisPersonalizadas: { disponivel: custom.available, total: custom.apis.length, falhando: custom.apis.filter(a => a.enabled && a.last_ok === false).length },
   };
 }

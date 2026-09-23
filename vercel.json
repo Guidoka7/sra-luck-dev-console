@@ -72,6 +72,10 @@
     {
       "source": "/api/custom-apis",
       "destination": "/api/infra-scan?mode=custom-apis"
+    },
+    {
+      "source": "/api/agentes",
+      "destination": "/api/infra-scan?mode=agents"
     }
   ],
   "headers": [

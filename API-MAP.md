@@ -53,6 +53,11 @@ A autorização real do Sra Luck continua existindo do outro lado; o RBAC do Dev
 
 Mora em `api/infra-scan.js` (`mode=problems`) por causa do limite de Functions do plano Hobby.
 
+## Agentes
+
+- `GET /api/agentes` — resumo do dia, agentes, novidades boas e ruins, correções recentes (`monitoring.view`)
+- `POST /api/agentes` `{ action: "analisar", problema }` — análise por IA do problema (Gemini, opcional)
+
 ## APIs personalizadas
 
 - `GET /api/custom-apis` (`?check=1` testa todas) — `integrations.view`
