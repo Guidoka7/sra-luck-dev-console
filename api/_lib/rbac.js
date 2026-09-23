@@ -8,7 +8,7 @@ const ROLE_PERMISSIONS = {
     'monitoring.view','infrastructure.view','incidents.manage','agents.run','agents.configure','jobs.view',
     'v46.inspect','v46.correct','finance.inspect','finance.correct','app.inspect','app.correct',
     'notifications.view','notifications.manage','integrations.view','integrations.manage',
-    'sra.staff.view','code.view','releases.view','audit.view','connectors.view'
+    'sra.staff.view','code.view','releases.view','releases.manage','audit.view','connectors.view'
   ],
   operator: [
     'monitoring.view','infrastructure.view','incidents.manage','agents.run','jobs.view','v46.inspect','v46.correct',

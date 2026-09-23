@@ -83,6 +83,18 @@ Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funçõ
 - **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
 - **Integrações** (`integracoes.html`): testes de conexão e teste/sincronização do RD Station. Credenciais e chaves VAPID continuam sendo editadas no Admin.
 
+## Engenharia
+
+`engenharia.html` junta os dois repositórios e os dois projetos Vercel:
+
+- **Pull requests**: CI de cada PR (clique para ver os checks), conflito, pronto para merge; re-rodar CI com falha e fazer merge (squash/merge/rebase). Merge com CI vermelho pede confirmação extra.
+- **CI**: execuções recentes com re-rodar falhas; **disparar workflow** manual.
+- **Commits** da main com o estado do CI.
+- **Deploys**: produção atual, novo deploy, promover preview e **voltar produção para uma versão anterior** (rollback).
+- **Criar PR** a partir de uma branch.
+
+Tudo roda no backend com `GITHUB_TOKEN` e `DEV_VERCEL_ACCESS_TOKEN`, só nos repositórios/projetos configurados, e fica em `dev_audit_logs`.
+
 ## Agentes
 
 `agentes.html` reúne sete agentes (Saúde, Bugs, App, Notificações, Jornada & Financeiro, Integrações e Infraestrutura). Cada um:

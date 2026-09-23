@@ -7,6 +7,7 @@
 - histórico de acessos da cliente no drawer e página Atividade do Admin;
 - Agentes: sete assistentes que explicam cada problema em linguagem simples, trazem boas notícias, corrigem o que é seguro e (opcional) pedem análise ao Gemini gratuito;
 - ícones completos no console;
+- Engenharia: PRs, CI, commits e deploys dos dois projetos com re-rodar CI, merge, criar PR, disparar workflow, redeploy, promover e rollback;
 - Memória e recursos com gráficos interativos (crosshair, tooltip de todas as séries, faixas 1h a 30 dias, tabela acessível) para os dois bancos, o Worker e a função do console;
 - Integrações reformuladas com logos oficiais, filtros por grupo, detalhes por provedor, histórico e APIs personalizadas monitoradas;
 

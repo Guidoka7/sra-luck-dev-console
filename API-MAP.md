@@ -17,7 +17,8 @@
 - `GET /api/dev-status`
 - `GET /api/dev-health`
 - `GET /api/dev-ready`
-- `GET /api/github-status?resource=commits|actions|issues`
+- `GET /api/github-status?resource=summary|overview|branches|workflows` — `code.view`
+- `POST /api/github-status` `{ action: rerun_failed|merge_pr|create_pr|dispatch_workflow|redeploy|promote, repo: sra|console, ... }` — `releases.manage` (developer/owner), auditado
 
 ### Proxy
 
