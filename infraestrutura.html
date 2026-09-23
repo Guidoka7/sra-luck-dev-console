@@ -7,7 +7,7 @@
 <div class="dc-summarybar">
  <div class="dc-summaryitem primary"><div class="ico"><i data-lucide="shield-check"></i></div><div><small>Estado geral</small><b id="infraOverall">Verificando…</b><div class="sub" id="overallHelp">Analisando serviços</div></div></div>
  <div class="dc-summaryitem"><div class="ico"><i data-lucide="triangle-alert"></i></div><div><small>Problemas agora</small><b id="problemCount">—</b><div class="sub">somente o que exige atenção</div></div></div>
- <div class="dc-summaryitem"><div class="ico"><i data-lucide="plug-zap"></i></div><div><small>Serviços conectados</small><b id="connectedCount">—</b><div class="sub">de 5 fontes principais</div></div></div>
+ <div class="dc-summaryitem"><div class="ico"><i data-lucide="plug-zap"></i></div><div><small>Serviços conectados</small><b id="connectedCount">—</b><div class="sub">de 8 fontes principais</div></div></div>
  <div class="dc-summaryitem"><div class="ico"><i data-lucide="clock-3"></i></div><div><small>Última leitura</small><b id="lastCheck">—</b><div class="sub">Guardian</div></div></div>
 </div>
 
@@ -43,14 +43,17 @@ const LINKS={
  cloudflare:'https://dash.cloudflare.com/',
  vercel:'https://vercel.com/guidoka7/sra-luck-dev-console',
  dev_runtime:'https://vercel.com/guidoka7/sra-luck-dev-console',
- api:'https://sra-luck-react.vercel.app'
+ api:'https://sra-luck-react.vercel.app',
+ storage:'https://supabase.com/dashboard/project/sbohknqapprimtspczio',
+ backups:'https://supabase.com/dashboard/project/sbohknqapprimtspczio',
+ guardian:'https://vercel.com/guidoka7/sra-luck-dev-console'
 };
 
 function pct(v){return v==null?'—':Number(v).toFixed(1)+'%'}
 function num(v){return v==null?'—':String(v)}
 function mb(v){return v==null?'—':(Number(v)/1024/1024).toFixed(0)+' MB'}
-function stateOf(p){if(!p||p.configured===false)return['Não conectado','warn'];if(p.ok)return['OK','ok'];return[p.status==='degraded'?'Atenção':'Falha',p.status==='degraded'?'warn':'bad']}
-function sourceName(s){return s==='supabase'?'Supabase Sra Luck':s==='dev_supabase'?'Supabase Dev Console':s==='cloudflare'?'Cloudflare Worker':s==='vercel'?'Vercel':s==='dev_runtime'?'Runtime Dev Console':'Infraestrutura'}
+function stateOf(p){if(!p||p.configured===false)return['Não conectado','warn'];if(p.status==='critical'||p.status==='down')return['Falha','bad'];if(p.status==='warning'||p.status==='degraded')return['Atenção','warn'];if(p.ok)return['OK','ok'];return['Falha','bad']}
+function sourceName(s){return s==='supabase'?'Supabase Sra Luck':s==='dev_supabase'?'Supabase Dev Console':s==='cloudflare'?'Cloudflare Worker':s==='vercel'?'Vercel':s==='dev_runtime'?'Runtime Dev Console':s==='storage'?'Storage Sra Luck':s==='backups'?'Backup do Supabase':s==='guardian'?'Infrastructure Guardian':'Infraestrutura'}
 function sourceLink(s){return LINKS[s]||LINKS.vercel}
 function severityLabel(s){return s.state==='critical'?'Crítico':'Atenção'}
 function currentValue(s){return s.value==null?'Sem leitura':Number(s.value).toFixed(1)+(s.unit||'')}
@@ -67,6 +70,9 @@ function explainSignal(s){
  if(key==='worker_memory_p99_percent')return{title:'Worker perto do limite de memória',meaning:'As requisições mais pesadas do Worker estão consumindo muita memória.',impact:'Pode gerar falhas em rotas pesadas.',next:'Abrir Cloudflare e revisar as rotas com maior consumo antes de alterar limites.'};
  if(key==='worker_error_rate_percent')return{title:'Worker com taxa de erro alta',meaning:'Uma parcela das requisições recentes terminou em erro.',impact:'Pode afetar Admin, App da Cliente ou integrações.',next:'Abrir logs e localizar as rotas/erros antes de qualquer correção.'};
  if(key==='rss_usage_percent')return{title:'Dev Console com memória alta',meaning:'O processo do próprio painel está consumindo muita memória.',impact:'Pode causar lentidão ou reinício da função.',next:'Revisar execução do Guardian e payloads carregados no painel.'};
+ if(key==='storage_unavailable')return{title:'Storage crítico com problema',meaning:'Um bucket usado por carnês, comprovantes, fotos ou vouchers está ausente, inacessível ou com privacidade incorreta.',impact:'Uploads e abertura de arquivos podem falhar mesmo com o banco funcionando normalmente.',next:'Abrir os detalhes do Storage, identificar o bucket afetado e corrigir existência, acesso ou privacidade antes de testar novamente.'};
+ if(key==='backup_age_hours')return{title:'Backup do banco está atrasado',meaning:'O backup mais recente identificado pelo Supabase ficou mais velho que a janela esperada.',impact:'A capacidade de recuperação do banco pode estar abaixo do esperado.',next:'Abrir o projeto no Supabase e conferir Backups antes de fazer qualquer alteração no banco.'};
+ if(key==='guardian_age_hours')return{title:'Guardian parou de coletar',meaning:'O painel ficou tempo demais sem registrar uma nova coleta automática.',impact:'Falhas podem acontecer sem aparecer no histórico do Dev Console.',next:'Verificar o Cron da Vercel e executar uma leitura manual para confirmar que a coleta voltou.'};
  return{title:s.label||'Sinal fora do normal',meaning:'O Guardian detectou uma leitura fora da faixa esperada.',impact:'Precisa ser analisado antes de alterar infraestrutura.',next:'Abrir os detalhes do provedor e verificar novamente após a análise.'};
 }
 
@@ -108,6 +114,9 @@ function openService(key){
  else if(key==='cloudflare'){const m=x&&x.metrics||{};add('Requests · 15m',num(m.requests));add('Erros · 15m',num(m.errors));add('Memória P99',pct(m.memoryP99Percent));add('CPU P99',m.cpuTimeP99Us!=null?(m.cpuTimeP99Us/1000).toFixed(1)+' ms':'—')}
  else if(key==='vercel'){add('Último deploy',x&&x.latest&&(x.latest.readyState||x.latest.state)||'—');add('API Vercel',x&&x.latencyMs!=null?x.latencyMs+' ms':'—');add('Projeto',x&&x.projectId||'—')}
  else if(key==='runtime'){const m=x&&x.metrics||{};add('RSS',mb(m.rssBytes));add('Heap usado',mb(m.heapUsedBytes));add('Heap',pct(m.heapUsagePercent));add('Região',m.region||'—');add('Node',m.nodeVersion||'—')}
+ else if(key==='storage'){add('Buckets encontrados',x&&x.totalBuckets!=null?x.totalBuckets:'—');for(const c of (x&&x.checks||[])){add(c.id,(c.existe&&c.acessivel&&c.privado===true)?'OK':c.detalhe||'Revisar')}}
+ else if(key==='backups'){add('Último backup',x&&x.latestAt?new Date(x.latestAt).toLocaleString('pt-BR'):'—');add('Idade',x&&x.ageHours!=null?x.ageHours.toFixed(1)+' h':'—');add('Backups retornados',x&&x.count!=null?x.count:'—')}
+ else if(key==='guardian'){add('Última coleta',x&&x.lastRunAt?new Date(x.lastRunAt).toLocaleString('pt-BR'):'—');add('Tempo desde coleta',x&&x.ageHours!=null?x.ageHours.toFixed(1)+' h':'—');add('Última fonte',x&&x.lastSource||'—')}
  const msg=x&&x.message?'<div class="dc-note" style="margin-top:10px">'+DC.esc(x.message)+'</div>':'';
  const src=key==='devSupabase'?'dev_supabase':key;
  const footer='<button class="dc-btn primary" onclick="runGuardianFromDrawer()">Verificar novamente</button><a class="dc-btn" target="_blank" rel="noopener" href="'+sourceLink(src)+'">Abrir provedor</a>';
@@ -189,21 +198,25 @@ async function load(){
  if(!await DC.guard())return;
  const [r,h,rd]=await Promise.all([DC.api('/api/infra-overview'),DC.api('/api/health'),DC.api('/api/ready')]);
  I=r.data||{};I.health=h;I.ready=rd;
- const p=I.providers||{},sra=p.supabase,dev=p.devSupabase,cf=p.cloudflare,ve=p.vercel,rt=p.runtime;
+ const p=I.providers||{},sra=p.supabase,dev=p.devSupabase,cf=p.cloudflare,ve=p.vercel,rt=p.runtime,storage=p.storage,backups=p.backups,guardian=p.guardian;
  visibleIssues=(I.signals||[]).filter(x=>!x.hidden&&(x.state==='warning'||x.state==='critical'));
  const serviceStates=[
-  {key:'api',ok:Boolean(h.ok&&rd.ok)},
-  {key:'supabase',ok:Boolean(sra&&sra.ok)},
-  {key:'devSupabase',ok:Boolean(dev&&dev.ok)},
-  {key:'cloudflare',ok:Boolean(cf&&cf.ok)},
-  {key:'vercel',ok:Boolean(ve&&ve.ok)}
+  {key:'api',source:'api',ok:Boolean(h.ok&&rd.ok)},
+  {key:'supabase',source:'supabase',ok:Boolean(sra&&sra.ok)},
+  {key:'devSupabase',source:'dev_supabase',ok:Boolean(dev&&dev.ok)},
+  {key:'cloudflare',source:'cloudflare',ok:Boolean(cf&&cf.ok)},
+  {key:'vercel',source:'vercel',ok:Boolean(ve&&ve.ok)},
+  {key:'storage',source:'storage',ok:Boolean(storage&&storage.ok)},
+  {key:'backups',source:'backups',ok:Boolean(backups&&(backups.status==='healthy'||backups.status==='warning'))},
+  {key:'guardian',source:'guardian',ok:Boolean(guardian&&(guardian.status==='healthy'||guardian.status==='warning'))}
  ];
- const providerFailures=serviceStates.filter(x=>!x.ok).length;
+ const issueSources=new Set(visibleIssues.map(x=>x.source));
+ const providerFailures=serviceStates.filter(x=>!x.ok&&!issueSources.has(x.source)).length;
  const totalProblems=visibleIssues.length+providerFailures;
  const connected=serviceStates.filter(x=>x.ok).length;
 
  DC.$('problemCount').textContent=totalProblems;
- DC.$('connectedCount').textContent=connected+'/5';
+ DC.$('connectedCount').textContent=connected+'/8';
  DC.$('lastCheck').textContent=I.generatedAt?DC.relTime(I.generatedAt):'agora';
  const overall=totalProblems===0?'healthy':visibleIssues.some(x=>x.state==='critical')||providerFailures?'critical':'warning';
  DC.$('infraOverall').textContent=overall==='healthy'?'Tudo operacional':overall==='critical'?'Precisa de atenção':'Acompanhar';
@@ -218,6 +231,9 @@ async function load(){
   serviceRow('api','radio-tower','API Sra Luck','Health e readiness',{configured:true,ok:h.ok&&rd.ok},rd.ms!=null?rd.ms+' ms':'—')+
   serviceRow('supabase','database','Supabase Sra Luck','Banco principal',sra,'RAM '+pct(sra&&sra.metrics&&sra.metrics.memory&&sra.metrics.memory.usagePercent))+
   serviceRow('devSupabase','database-zap','Supabase Dev Console','Banco do painel',dev,'RAM '+pct(dev&&dev.metrics&&dev.metrics.memory&&dev.metrics.memory.usagePercent))+
+  serviceRow('storage','hard-drive','Storage Sra Luck','Carnês, comprovantes, fotos e vouchers',storage,(storage&&storage.checks||[]).filter(x=>x.existe&&x.acessivel&&x.privado===true).length+'/'+((storage&&storage.checks||[]).length||3)+' buckets')+
+  serviceRow('backups','archive-restore','Backup do banco','Última cópia do Supabase',backups,backups&&backups.ageHours!=null?backups.ageHours.toFixed(1)+' h':'—')+
+  serviceRow('guardian','radar','Guardian automático','Confirma que o monitor continua rodando',guardian,guardian&&guardian.ageHours!=null?guardian.ageHours.toFixed(1)+' h':'—')+
   serviceRow('cloudflare','cloud','Cloudflare Worker','API e runtime principal',cf,'Erros '+num(cf&&cf.metrics&&cf.metrics.errors))+
   serviceRow('vercel','triangle','Vercel','Hospedagem do Dev Console',ve,ve&&ve.latest&&(ve.latest.readyState||ve.latest.state)||'—');
 

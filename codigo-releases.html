@@ -6,6 +6,27 @@
 <div class="dc-maint-grid"><section class="dc-card dc-section"><div class="dc-section-head"><div class="dc-title"><i data-lucide="history"></i><div><h2>Releases recentes</h2><p>Use para correlacionar regressões com um SHA.</p></div></div><button class="dc-btn" id="refreshBtn">Atualizar</button></div><div id="commits"></div></section><section class="dc-card dc-section"><div class="dc-section-head"><div class="dc-title"><i data-lucide="workflow"></i><div><h2>CI / Deploy</h2><p>Falhas relevantes da entrega.</p></div></div></div><div id="runs" class="dc-domain-list"></div></section></div>
 </div></main></div>
 <script src="assets/dev-console-core.js"></script><script>
-async function load(){if(!await DC.guard())return;const [g,v,r]=await Promise.all([DC.api('/api/github-status'),DC.api('/api/infra-vercel'),DC.api('/api/ready')]);const gd=g.data||{},vd=v.data||{};const c=gd.commit||gd.current||{};DC.$('sha').textContent=(c.sha||gd.sha||'—').slice(0,12);DC.$('commitMsg').textContent=c.message||gd.message||'Sem mensagem';const runs=gd.runs||gd.workflows||[],bad=runs.filter(x=>x.conclusion==='failure'||x.status==='failure');DC.$('ciState').textContent=bad.length?`${bad.length} falha(s)`:'OK';DC.$('ciState').className=bad.length?'dc-danger-text':'dc-ok-text';DC.$('deployState').textContent=vd.latest?.readyState||vd.latest?.state||'—';DC.$('readyState').textContent=r.ok?'OK':'Falha';DC.$('readyState').className=r.ok?'dc-ok-text':'dc-danger-text';const commits=gd.commits||[];DC.$('commits').innerHTML=commits.slice(0,12).map(x=>`<div class="dc-row" style="grid-template-columns:90px 1fr auto"><span class="dc-mono">${DC.esc((x.sha||'').slice(0,10))}</span><div><strong>${DC.esc(x.message||'Commit')}</strong><div class="dc-muted">${DC.esc(x.author||x.author_name||'')}</div></div><span class="dc-muted">${x.date?DC.relTime(x.date):'—'}</span></div>`).join('')||'<div class="dc-empty">Sem commits carregados.</div>';DC.$('runs').innerHTML=runs.slice(0,8).map(x=>`<div class="dc-domain-row"><div class="dc-domain-icon"><i data-lucide="${x.conclusion==='failure'?'x-circle':'check-circle'}"></i></div><div><strong>${DC.esc(x.name||x.workflow||'Workflow')}</strong><p>${DC.esc(x.head_sha?.slice(0,8)||x.sha?.slice(0,8)||'')}</p></div><div class="dc-domain-metric"></div>${DC.chip(x.conclusion||x.status||'—',x.conclusion==='failure'?'bad':x.conclusion==='success'?'ok':'warn')}</div>`).join('')||'<div class="dc-empty">Sem workflows carregados.</div>';DC.setTopStatus((bad.length||!r.ok)?'Release requer atenção':'Release estável',(bad.length||!r.ok)?'warn':'ok');window.lucide?.createIcons()}
+async function load(){
+ if(!await DC.guard())return;
+ const [g,v,r]=await Promise.all([DC.api('/api/github-status'),DC.api('/api/infra-vercel'),DC.api('/api/ready')]);
+ const gd=g.data||{},vd=v.data||{},c=gd.commit||gd.current||{},runs=gd.runs||[];
+ const latest=runs[0]||null;
+ DC.$('sha').textContent=(c.sha||gd.sha||'—').slice(0,12);
+ DC.$('commitMsg').textContent=c.message||gd.message||'Sem mensagem';
+ const ciOk=latest&&latest.status==='completed'&&latest.conclusion==='success';
+ const ciBad=latest&&latest.status==='completed'&&latest.conclusion==='failure';
+ DC.$('ciState').textContent=!latest?'Sem leitura':ciOk?'OK':ciBad?'Falhou':latest.status==='in_progress'?'Executando':latest.conclusion||latest.status||'—';
+ DC.$('ciState').className=ciOk?'dc-ok-text':ciBad?'dc-danger-text':'dc-warn-text';
+ DC.$('deployState').textContent=vd.latest?.readyState||vd.latest?.state||'—';
+ DC.$('readyState').textContent=r.ok?'OK':'Falha';DC.$('readyState').className=r.ok?'dc-ok-text':'dc-danger-text';
+ const commits=gd.commits||[];
+ DC.$('commits').innerHTML=commits.slice(0,12).map(x=>`<div class="dc-row" style="grid-template-columns:90px 1fr auto"><span class="dc-mono">${DC.esc((x.sha||'').slice(0,10))}</span><div><strong>${DC.esc(x.message||'Commit')}</strong><div class="dc-muted">${DC.esc(x.author||'')}</div></div><span class="dc-muted">${x.date?DC.relTime(x.date):'—'}</span></div>`).join('')||'<div class="dc-empty">Sem commits carregados.</div>';
+ DC.$('runs').innerHTML=runs.slice(0,8).map((x,i)=>{const bad=x.conclusion==='failure',ok=x.conclusion==='success',running=x.status==='in_progress'||x.status==='queued';return `<div class="dc-domain-row"><div class="dc-domain-icon"><i data-lucide="${bad?'x-circle':running?'loader-circle':'check-circle'}"></i></div><div><strong>${DC.esc((i===0?'Atual · ':'')+(x.name||'Workflow'))}</strong><p>${DC.esc((x.head_sha||'').slice(0,8))} · ${x.updated_at?DC.relTime(x.updated_at):'—'}</p></div><div class="dc-domain-metric"></div>${DC.chip(bad?'Falhou':ok?'OK':x.status||'—',bad?'bad':ok?'ok':'warn')}</div>`}).join('')||'<div class="dc-empty">Sem workflows carregados.</div>';
+ const deploySha=vd.latest?.meta?.githubCommitSha||null,currentSha=c.sha||null;
+ if(deploySha&&currentSha&&deploySha!==currentSha){DC.$('deployState').textContent=(vd.latest?.readyState||vd.latest?.state||'—')+' · atrás';DC.$('deployState').className='dc-warn-text'}else DC.$('deployState').className=(vd.latest?.readyState==='READY'||vd.latest?.state==='READY')?'dc-ok-text':'';
+ const badCurrent=ciBad||!r.ok;
+ DC.setTopStatus(badCurrent?'Release requer atenção':running?'CI executando':'Release estável',badCurrent?'bad':running?'warn':'ok');
+ window.lucide?.createIcons();
+}
 document.addEventListener('DOMContentLoaded',()=>{DC.$('refreshBtn').onclick=load;load();DC.poll(load,90000)});
 </script></body></html>
