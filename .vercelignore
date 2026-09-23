@@ -8,3 +8,6 @@ BUILD-MANIFEST.json
 .env.example
 .editorconfig
 .gitignore
+
+api/infra-supabase.js
+api/infra-vercel.js
