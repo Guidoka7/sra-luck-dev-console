@@ -1,0 +1,500 @@
+{
+  "project": "sra-luck-dev-console",
+  "version": "0.3.0",
+  "generated_at": "2026-09-23",
+  "sra_luck_baseline_sha": "accbff2fda17fdbc3a38564629926e9815ef2210",
+  "file_count": 98,
+  "total_bytes": 2286026,
+  "files": [
+    {
+      "path": ".editorconfig",
+      "bytes": 188,
+      "sha256": "a6b98ea7cb6d61ed8d430dd0dffa46c87012b5cf859d4ce7207898954951fdcd"
+    },
+    {
+      "path": ".env.example",
+      "bytes": 1206,
+      "sha256": "39eb4a3066a628bcea136bbbf9d66bad24d748601b1519c17fd0ed22018280f1"
+    },
+    {
+      "path": ".github/CODEOWNERS",
+      "bytes": 12,
+      "sha256": "069396942375de05dc17c4159fb4998f9385de4ad142e36047d0d55aa986a854"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/bug.yml",
+      "bytes": 719,
+      "sha256": "762d32902563420985c5e6a9f3897c8c73bdcbffafe4538d171f4ed6325b81a4"
+    },
+    {
+      "path": ".github/ISSUE_TEMPLATE/config.yml",
+      "bytes": 27,
+      "sha256": "13064e7bea658e01e718b414fbb7b3b244f36411fe25ee2055c151f7b534547a"
+    },
+    {
+      "path": ".github/workflows/validate.yml",
+      "bytes": 326,
+      "sha256": "bc430631d84c1b4c5fbe4ee83b2a231275392eb8aaed1f3e9a4b1bab678729dd"
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 334,
+      "sha256": "a066e2fead86ddafd3c8b212c07aab04d2f8736ab72acc0c9b168b9c8b1f77f8"
+    },
+    {
+      "path": ".vercelignore",
+      "bytes": 114,
+      "sha256": "69f8c11b489ecd326237d8138041c5719fbde1083020cee5ea2fe2ca464c168f"
+    },
+    {
+      "path": "AGENTS-ROADMAP.md",
+      "bytes": 3227,
+      "sha256": "2dccb958406b230dc23672f50e808ad759b10757084e4a38adaab59cf2a4ed71"
+    },
+    {
+      "path": "API-MAP.md",
+      "bytes": 2453,
+      "sha256": "4adbea88e91994b9fc70c1c4828ec2e87decec6c42a67f0b4f7b3ae9ddf82285"
+    },
+    {
+      "path": "ARCHITECTURE.md",
+      "bytes": 2367,
+      "sha256": "b2383265f6569e5b6868472363eff5ab55bf4cc21d5a99f23f92bf69d0d11021"
+    },
+    {
+      "path": "BUG-OPERATING-MODEL.md",
+      "bytes": 1451,
+      "sha256": "d33d5a22f23a4a5a4ad2d72813961d9d268bf1a62802122b731ba6a318c6c43d"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "bytes": 679,
+      "sha256": "9a8353088a42317b150352403747bde2643f3406d3a949d55d8153ccb5605a7e"
+    },
+    {
+      "path": "DEPLOY.md",
+      "bytes": 2030,
+      "sha256": "27c91dd39d2a540bea4467f61cd9495c4c87fd8213caed11844a681174546b36"
+    },
+    {
+      "path": "FUNCTIONS.md",
+      "bytes": 2057,
+      "sha256": "033224834599289076886698edceda25088e1d5294f054e531062bd08d2042d7"
+    },
+    {
+      "path": "GIT-QUICKSTART.md",
+      "bytes": 1038,
+      "sha256": "27eda1f3b41aa34e246136b6f2788c9dc1dcc4f93dc9d4faef10904c563a134b"
+    },
+    {
+      "path": "INFRASTRUCTURE-OBSERVABILITY.md",
+      "bytes": 6018,
+      "sha256": "74a0e070500c3dd9ae4af928bd4ae20da51c1b7d6fa7a18f603f1ee55a8728d0"
+    },
+    {
+      "path": "LOCAL-DEVELOPMENT.md",
+      "bytes": 1191,
+      "sha256": "8efc4e17face5449f264db4afb7def39a3e23a68eb7651eaf93d609ff43b56ce"
+    },
+    {
+      "path": "NEXT-STEPS.md",
+      "bytes": 960,
+      "sha256": "6f0cd8b81726bc6ca7773b2825af652b248cb7475ff3b440e9e6781df3b0b967"
+    },
+    {
+      "path": "OPERATIONS-RUNBOOK.md",
+      "bytes": 1464,
+      "sha256": "314829b1a0c86bcb77c39cbc11b7594d26b604db3f534e4d0563f19f6e1d7bd1"
+    },
+    {
+      "path": "PROJECT-STATUS.md",
+      "bytes": 1665,
+      "sha256": "a728e314e9c38d322944bec67cd775f08118dbdd37d331cc258ad661e8876414"
+    },
+    {
+      "path": "README.md",
+      "bytes": 3818,
+      "sha256": "6393b3ab93faf570aada0c48c5ee52d32cde8237200264d7cb4a2f3e79dc4e66"
+    },
+    {
+      "path": "REPOSITORY-CHECKLIST.md",
+      "bytes": 1592,
+      "sha256": "177194940ba1a132c1d1086eb5ac5e4392d3e1923122ba33b2836d44f501d086"
+    },
+    {
+      "path": "SCHEDULER.md",
+      "bytes": 1237,
+      "sha256": "35204bd2bdfea03f3fc24b487c2a92284d4089d162348afa2c8086ceff309fe5"
+    },
+    {
+      "path": "SECURITY.md",
+      "bytes": 1693,
+      "sha256": "0b7bd360cd30a432f986d13ac561509734c9bb95be53be9721194bf65c463284"
+    },
+    {
+      "path": "SETUP-V1.md",
+      "bytes": 4192,
+      "sha256": "76d1323398193fbbddbb9cf9580246a8ca24d7ea8f69294c86a77b3aafb4e118"
+    },
+    {
+      "path": "SETUP.md",
+      "bytes": 694,
+      "sha256": "aca73fd7ab1af5affd3c513ade69a70ade76b0ecf311e0c9a25b19b35354c358"
+    },
+    {
+      "path": "SHA256SUMS.txt",
+      "bytes": 8520,
+      "sha256": "3febe02122981767fbd4fffa6ab831efd99bb60fa451966e22ade46932559c22"
+    },
+    {
+      "path": "SRA-CONNECTOR-CONTRACT.md",
+      "bytes": 1218,
+      "sha256": "b48f9262b5359627d1757d17ca1c580c68c15e286bb5779bc1a971f3f40fb476"
+    },
+    {
+      "path": "VALIDATION.json",
+      "bytes": 901,
+      "sha256": "8b7e8759ae3d81b1e90e168304a1e37abb3c16c157a5eb5b0d0a4da19facbd86"
+    },
+    {
+      "path": "api/README.md",
+      "bytes": 453,
+      "sha256": "2723f74d9abb0a2f54d007c6f4a4ed1edc95f942f61fcad55efbbed01e96463d"
+    },
+    {
+      "path": "api/_lib/http.js",
+      "bytes": 3416,
+      "sha256": "fb642bb70df479919de85755862639c4ade5cc57df1990869a34907cda132885"
+    },
+    {
+      "path": "api/_lib/infra.js",
+      "bytes": 22979,
+      "sha256": "46e29463077ffdbc9d6ea53c4043685f1833e7df0a5d7d8886bd7a770da36fe5"
+    },
+    {
+      "path": "api/_lib/rbac.js",
+      "bytes": 2509,
+      "sha256": "c0eb91158d0656945609785a8dbdfbd069c6ecae4e456d6f01fdf6d22f5bfe0d"
+    },
+    {
+      "path": "api/_lib/session.js",
+      "bytes": 1735,
+      "sha256": "0baa968c7b2d3ec04f6a3b11dee97dc516c346f0e4c7586944561df7b75ae185"
+    },
+    {
+      "path": "api/_lib/supabase.js",
+      "bytes": 3964,
+      "sha256": "ba0f51e439010920dc22097ee27ba88fe0277298f65aad4f8cf8ef65bf7e0733"
+    },
+    {
+      "path": "api/auth-forgot.js",
+      "bytes": 957,
+      "sha256": "79f2487d1d14cc2a8c3348856219a7c123e85a2562acc1a5dc2be55fc365654d"
+    },
+    {
+      "path": "api/auth-login.js",
+      "bytes": 3149,
+      "sha256": "86ec984c8ca887294f1e3423a757115f0040d6f54b6303895e24130a1e2b4496"
+    },
+    {
+      "path": "api/auth-logout.js",
+      "bytes": 680,
+      "sha256": "f0d4efc2d2cf22f1bddd89dd40fcc284132045eb502a941d7f47048f10ed9efe"
+    },
+    {
+      "path": "api/auth-reset.js",
+      "bytes": 952,
+      "sha256": "78bd117dff40f714dcb5f496f4f5ade34f5e8e164894584214596c89c91a9910"
+    },
+    {
+      "path": "api/auth-session.js",
+      "bytes": 491,
+      "sha256": "0ac269b738e25255d5f30b3615c73783fa433be33c9eacb82be66479c40660e8"
+    },
+    {
+      "path": "api/dev-audit.js",
+      "bytes": 765,
+      "sha256": "9ef1ff3f163866415842a2e1afd5d1a7ff2ac5a7ec5c3695b5a09183b5c0cf80"
+    },
+    {
+      "path": "api/dev-health.js",
+      "bytes": 342,
+      "sha256": "60dc8fa38f6b51be3d3266145dd047c748cbce1b72cf034c7ffd44e538c198e3"
+    },
+    {
+      "path": "api/dev-ready.js",
+      "bytes": 641,
+      "sha256": "0c8f1c09788130642fdffc235a3f11aefae6fd51de20f5870bf97a9bbf450331"
+    },
+    {
+      "path": "api/dev-status.js",
+      "bytes": 1450,
+      "sha256": "20a67ef5dad6e3e2d6cade713b6c1a39fbc559678d5ea7b393e61a29f6400590"
+    },
+    {
+      "path": "api/dev-users.js",
+      "bytes": 3932,
+      "sha256": "7001baa7742d6d5cfbefeba8c3b9869b92cd656015d52f87b8071f2ddabf090f"
+    },
+    {
+      "path": "api/github-status.js",
+      "bytes": 1228,
+      "sha256": "137101955e558da313d7553185f985ee991e3535254fcdd7b467274c657bcb43"
+    },
+    {
+      "path": "api/infra-cloudflare.js",
+      "bytes": 471,
+      "sha256": "3af5ef704f6ee6983be17fac5f9ce6de2b80fd57f22a609419abffd1a091cbfe"
+    },
+    {
+      "path": "api/infra-dev-supabase.js",
+      "bytes": 711,
+      "sha256": "41c287cd0c37bc234103e7b87bf1de62f0e3b5bb205a29ff757f39667d3830d5"
+    },
+    {
+      "path": "api/infra-history.js",
+      "bytes": 1209,
+      "sha256": "6b18a0042a72d1c4773eee5b89b1c9a1ebd69f612fd52714c493ddcd574b0e89"
+    },
+    {
+      "path": "api/infra-overview.js",
+      "bytes": 505,
+      "sha256": "3eb48a359e11dfc3ba86e40701b0137cd42cca8f9c1abcd127d618dd33cd8664"
+    },
+    {
+      "path": "api/infra-runtime.js",
+      "bytes": 493,
+      "sha256": "732399232fd225cea2163cf93ae589e9a3c98683cec28173fd613ff297596c1a"
+    },
+    {
+      "path": "api/infra-scan.js",
+      "bytes": 9706,
+      "sha256": "694483c83c0de7e6540542db83a47328540ac409f1a6db1d3e58e0b77c8df1f4"
+    },
+    {
+      "path": "api/infra-supabase.js",
+      "bytes": 682,
+      "sha256": "3a439e354b3a737c0dd421c7cd02e583b9b46ae61e890c433dea223eb91a3701"
+    },
+    {
+      "path": "api/infra-vercel.js",
+      "bytes": 521,
+      "sha256": "4b4e2bef84b515a8c440af2ce5f8bee62ff973a15c912444ae42778a8653478a"
+    },
+    {
+      "path": "api/sra-proxy.js",
+      "bytes": 4034,
+      "sha256": "a23cb1bac86c6f6e2b9f7df682f8b048210f6724f8369bfe907bafb939284924"
+    },
+    {
+      "path": "app-cliente.html",
+      "bytes": 19494,
+      "sha256": "848d511e151b1e79252a4024440559f8d4472a0597bca58737f2d8df6e7954b6"
+    },
+    {
+      "path": "assets/dev-auth.js",
+      "bytes": 862,
+      "sha256": "71722ad9233e41747046be81edce0222be1d6c86e47b2234121ffccd75013e5e"
+    },
+    {
+      "path": "assets/dev-console-core.js",
+      "bytes": 15683,
+      "sha256": "7d8ecbaf543e594ba41908aabc9b24b7600008b90609768ce0f1fa4689aa1058"
+    },
+    {
+      "path": "assets/dev-console-icons.js",
+      "bytes": 4326,
+      "sha256": "adcaf4316cf4c8929417f3d1f9d0e33734497e2276a364e83133d36ecad218f2"
+    },
+    {
+      "path": "assets/dev-console.css",
+      "bytes": 33079,
+      "sha256": "a9741931f162dc0eee93751c30948a5c365d506ec730b2e20f3e3619bcd2d67b"
+    },
+    {
+      "path": "clube-vantagens.html",
+      "bytes": 20982,
+      "sha256": "e7a5cdbca39c1c7e6cf8a7296d7dd7bc7383b0144ab2ba4c9abb6318c14ad5e9"
+    },
+    {
+      "path": "codigo-releases.html",
+      "bytes": 6009,
+      "sha256": "b1cc7db9e4506bbc5545b15726a40715f79ed25a69f5219cd0c0a6513126e807"
+    },
+    {
+      "path": "conexoes.html",
+      "bytes": 4230,
+      "sha256": "4d733e2e2b574609d00f9839a11d19a4ebb10a9f71780cf77e52c6598fd4c73c"
+    },
+    {
+      "path": "dev-acessos.html",
+      "bytes": 5518,
+      "sha256": "d0ed8ae5e9c794434fd51df594f6b841293737452fe203cf3982f38413338fda"
+    },
+    {
+      "path": "docs/qa/00-contato-simplificado.png",
+      "bytes": 605779,
+      "sha256": "201f00a33f1ce073603e9e02539c6897c941ac4fe7dbc39fda7ec2d37a5670bd"
+    },
+    {
+      "path": "docs/qa/01-visao-geral.png",
+      "bytes": 222147,
+      "sha256": "e519533f53c6ccf611042e9c21dc8eb82c1e465e46819ddb459575891eba573b"
+    },
+    {
+      "path": "docs/qa/02-incidentes.png",
+      "bytes": 158232,
+      "sha256": "d43c474e6951e27650123a448b80ded4af2b99fd16cb64aab5b79ec41a9e7b3c"
+    },
+    {
+      "path": "docs/qa/03-sistema.png",
+      "bytes": 162308,
+      "sha256": "71902908d3a2655ec28fc4c6040ee6e93934255844b3ca82d13af49f602e8234"
+    },
+    {
+      "path": "docs/qa/04-infraestrutura.png",
+      "bytes": 190732,
+      "sha256": "0448885dc1a2b042fb9981bb9934c4d7a055f04ae5781ea9227fb155b49f95ce"
+    },
+    {
+      "path": "docs/qa/05-notificacoes.png",
+      "bytes": 151755,
+      "sha256": "e20e624b9e56a253f693b29859d48f1364c4fc326176b99ab750cf10b03abf6d"
+    },
+    {
+      "path": "docs/qa/06-releases.png",
+      "bytes": 129871,
+      "sha256": "3adc66de6d7aefd4eab020b70373ce544a0787b49fafcf27c5a796d4ce1d861a"
+    },
+    {
+      "path": "docs/qa/07-acessos.png",
+      "bytes": 107575,
+      "sha256": "3b5f863fc9dece0481f2dc59ec123cdb881f7a6763a5f3294e5332d5b6477c94"
+    },
+    {
+      "path": "docs/qa/08-conexoes.png",
+      "bytes": 112956,
+      "sha256": "93e0c9ff8b5e00d3f75cb657b16be456105e6f89860e7bcbe42947c0471b5edf"
+    },
+    {
+      "path": "docs/qa/README.md",
+      "bytes": 279,
+      "sha256": "3226346af770f2b62b4ccb99dd72d74a17241b9dd85921e9fd990b1ce6e5ad5e"
+    },
+    {
+      "path": "equipe-permissoes.html",
+      "bytes": 21753,
+      "sha256": "b72df772df794c388df10b202c9fbfa324dbcba75b90fa9b0b3c867324afa755"
+    },
+    {
+      "path": "financeiro.html",
+      "bytes": 24654,
+      "sha256": "41dc0035b1ece6491c75cf73c8670299e37530fe9bd43d143049b03d70eafff0"
+    },
+    {
+      "path": "forgot-password.html",
+      "bytes": 1995,
+      "sha256": "c7387aa417c21d773bc01cf6c0ac51fe01e9dee6a1a7165631fd20af6ca6326a"
+    },
+    {
+      "path": "incidentes.html",
+      "bytes": 8154,
+      "sha256": "fc1f7d18b8b5150672f2fb7b89aa75b227ce302a14e73a8a1cd227272c18e25a"
+    },
+    {
+      "path": "index.html",
+      "bytes": 827,
+      "sha256": "8dcbf122bde117462e3c31acfcd946249857b7e98b6547cf61e17a6f49434c06"
+    },
+    {
+      "path": "infraestrutura.html",
+      "bytes": 13122,
+      "sha256": "3f351518b84f367ae1feb39aacce7a4c06e953dcdf032197bdf4021231505346"
+    },
+    {
+      "path": "integracoes.html",
+      "bytes": 28338,
+      "sha256": "7183550d8c71ff664c7e97abab87d469175f80333a1248feaf7a2fe88c692938"
+    },
+    {
+      "path": "jornada-v46.html",
+      "bytes": 23940,
+      "sha256": "be702be6a477ba1d40a68daf59338d5baabf0dbb5b874ffa5856813a5dcc7f55"
+    },
+    {
+      "path": "login.html",
+      "bytes": 3533,
+      "sha256": "a8e719cd69c59f50acbb7bf2bedf41561ec1c3c0e819dff901e8f2810bc9e344"
+    },
+    {
+      "path": "monitoramento.html",
+      "bytes": 20199,
+      "sha256": "d63db165950ac0cf3fc1d12254c290b33c8e48d9e0f06df6f4fc7f06a85d33a7"
+    },
+    {
+      "path": "notificacoes.html",
+      "bytes": 7627,
+      "sha256": "1def65ee7c68537c1802d3aec77beb8d11b52f812c374f6209e083d8047d52fa"
+    },
+    {
+      "path": "operacao-admin.html",
+      "bytes": 16172,
+      "sha256": "46a0dcd23631af6d1560583efeb52b67ffc8055c4be36f0f459b7150ebced3aa"
+    },
+    {
+      "path": "package.json",
+      "bytes": 582,
+      "sha256": "f4c5717d57e0c168da6823f42ee59d84e3604c34c2bc035f03d2eb2c4d283326"
+    },
+    {
+      "path": "reset-password.html",
+      "bytes": 2737,
+      "sha256": "ffae76ba0105bfbce7f0fd74594ff2b68a65246c8967e4b7041a1c7f63297372"
+    },
+    {
+      "path": "scripts/security-check.mjs",
+      "bytes": 1460,
+      "sha256": "ad259a4c584364440dc725539f1270978e7f69ee0b77ef2f3cce4d18ff2eff6e"
+    },
+    {
+      "path": "scripts/validate.mjs",
+      "bytes": 2477,
+      "sha256": "579a0203187cc7c44ea6fb19322ff767d5be293873fd784d95b9f13f622197d5"
+    },
+    {
+      "path": "sistema.html",
+      "bytes": 8608,
+      "sha256": "45cbdbe25232255c33531a32c9023c2c2fc3966e98e115f494a1d2460361f871"
+    },
+    {
+      "path": "supabase/001_dev_console_base.sql",
+      "bytes": 5527,
+      "sha256": "b8db50a134cf204386d762085099b12589f9eca5556c09952d691ace7f41fb9f"
+    },
+    {
+      "path": "supabase/002_infrastructure_observability.sql",
+      "bytes": 5805,
+      "sha256": "29494e0167bc4b2d4b4bb7983cdf8634063b81789389b827a4cecc6855f8d214"
+    },
+    {
+      "path": "supabase/BOOTSTRAP_OWNER.sql",
+      "bytes": 512,
+      "sha256": "bf48d19875cd236b1e7d8dfd9a24973adced467e3b6c248fad135f329a01d53c"
+    },
+    {
+      "path": "supabase/README.md",
+      "bytes": 307,
+      "sha256": "78cb1de3e203d3c7156f83efbdd3a193e0c6a81b2a2244c4e3b1422473e3a6c0"
+    },
+    {
+      "path": "vercel.json",
+      "bytes": 2015,
+      "sha256": "ccaeb3d6a16e4d435d97befa0c6d4a29d1f31632b8ed011ddd7d1263c0a86443"
+    },
+    {
+      "path": "visao-geral.html",
+      "bytes": 12499,
+      "sha256": "1e57bcdc42d2340094309019690652f192ac570b597b0968fc87126ae0c87d95"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "status": "PASSED",
+  "generated_at": "2026-09-23",
+  "package_version": "0.3.0",
+  "sra_luck_baseline_sha": "accbff2fda17fdbc3a38564629926e9815ef2210",
+  "html_files": 20,
+  "server_and_client_js_files": 28,
+  "checks": {
+    "npm_run_check": true,
+    "javascript_syntax": true,
+    "local_links": true,
+    "duplicate_ids": true,
+    "infrastructure_guardian": true,
+    "auth_and_rbac": true,
+    "server_side_sra_proxy": true,
+    "security_headers": true,
+    "basic_secret_scan": true,
+    "github_actions_validation": true,
+    "qa_reference_included": true
+  },
+  "limitations": [
+    "E2E real depende da criação/configuração do novo Supabase e Vercel.",
+    "Endpoints administrativos do Sra Luck dependem do conector M2M a ser habilitado no sra-luck-react.",
+    "Métricas reais dos providers dependem das credenciais server-side descritas em .env.example."
+  ],
+  "errors": []
+}

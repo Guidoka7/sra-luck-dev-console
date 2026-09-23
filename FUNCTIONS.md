@@ -1,0 +1,85 @@
+# Funções do Dev Console V1
+
+## Autenticação própria
+
+- Login por e-mail/senha no Supabase separado.
+- Sessão assinada no backend e armazenada em cookie HttpOnly.
+- Recuperação e redefinição de senha.
+- Sessão de 8 horas.
+- Rate limiting básico persistido por eventos de autenticação.
+- Auditoria de login/logout.
+
+## RBAC próprio
+
+Perfis: Owner, Developer, Operator e Viewer.
+
+A tela `dev-acessos.html` permite ao Owner:
+
+- criar novo acesso técnico;
+- definir role;
+- ativar/desativar;
+- conceder permissões extras;
+- consultar último acesso;
+- consultar auditoria do control plane.
+
+## Proxy server-to-server
+
+`DC.api()` roteia automaticamente APIs do Sra Luck para `/api/sra-proxy`.
+
+O proxy:
+
+- valida a sessão Dev;
+- valida permissão por domínio;
+- injeta identidade do operador;
+- usa token M2M somente server-side;
+- mantém request ID;
+- audita mutações.
+
+## Conexões
+
+`conexoes.html` mostra:
+
+- Supabase técnico;
+- segredo de sessão configurado/não configurado;
+- health/ready do Sra Luck;
+- token M2M configurado/não configurado;
+- GitHub token configurado/não configurado;
+- teste público e administrativo do conector.
+
+## Observabilidade existente
+
+As páginas operacionais continuam preparadas para:
+
+- Visão Geral;
+- Incidentes;
+- Monitoramento;
+- V46;
+- Financeiro;
+- App/PWA;
+- Notificações/Web Push;
+- Clube;
+- Integrações;
+- Equipe/RBAC do sistema principal;
+- Código/Releases.
+
+## Próxima evolução
+
+Consultar `AGENTS-ROADMAP.md`.
+
+## Infraestrutura & Recursos
+
+`infraestrutura.html` é o cockpit do Infrastructure & Resource Guardian.
+
+Funções:
+- status de cada provider;
+- RAM/swap/disco/CPU/I/O do Supabase;
+- logs de erro do Supabase;
+- memória e CPU do Cloudflare Worker;
+- deploys Vercel;
+- memória da Function atual do Dev Console;
+- telemetria App/PWA;
+- sinais com thresholds visíveis;
+- execução manual do Guardian;
+- incidentes de infraestrutura persistidos.
+
+A interface diferencia `não configurado` de `indisponível` e nunca substitui uma métrica ausente por valor fictício.

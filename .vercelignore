@@ -1,0 +1,10 @@
+.github/
+docs/
+supabase/
+scripts/
+*.md
+VALIDATION*.json
+BUILD-MANIFEST.json
+.env.example
+.editorconfig
+.gitignore

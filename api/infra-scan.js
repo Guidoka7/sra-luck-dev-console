@@ -1,0 +1,78 @@
+const crypto=require('crypto');
+const { json, methodNotAllowed, requestId } = require('./_lib/http');
+const { requireSession } = require('./_lib/rbac');
+const { rest, audit } = require('./_lib/supabase');
+const { getInfraOverview } = require('./_lib/infra');
+
+function safeEqual(a,b){
+ const A=Buffer.from(String(a||'')),B=Buffer.from(String(b||''));
+ return A.length===B.length&&A.length>0&&crypto.timingSafeEqual(A,B);
+}
+function cronAuthorized(req){
+ const secret=String(process.env.CRON_SECRET||'');
+ const auth=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
+ return Boolean(secret&&safeEqual(secret,auth));
+}
+async function loadThresholds(){
+ try{return await rest('dev_resource_thresholds?enabled=eq.true&select=source,metric_key,label,warning_value,critical_value,comparator,sustain_seconds,description',{method:'GET'})}catch{return[]}
+}
+function thresholdState(value,t){
+ if(value==null||!Number.isFinite(Number(value)))return'unknown';const v=Number(value),warn=Number(t.warning_value),crit=Number(t.critical_value);
+ if(t.comparator==='lte'){if(Number.isFinite(crit)&&v<=crit)return'critical';if(Number.isFinite(warn)&&v<=warn)return'warning';return'healthy'}
+ if(Number.isFinite(crit)&&v>=crit)return'critical';if(Number.isFinite(warn)&&v>=warn)return'warning';return'healthy';
+}
+async function sustained(source,key,current,t,observedAt){
+ if(!['warning','critical'].includes(current.state))return false;
+ const seconds=Math.max(0,Number(t.sustain_seconds||0));if(seconds===0)return true;
+ const since=new Date(new Date(observedAt).getTime()-seconds*1000).toISOString();
+ let rows=[];try{rows=await rest(`dev_metric_snapshots?source=eq.${encodeURIComponent(source)}&metric_key=eq.${encodeURIComponent(key)}&observed_at=gte.${encodeURIComponent(since)}&select=metric_value,state,observed_at&order=observed_at.asc&limit=500`,{method:'GET'})}catch{return false}
+ if(!rows.length)return false;const earliest=new Date(rows[0].observed_at).getTime();const coverage=(new Date(observedAt).getTime()-earliest)/1000;if(coverage<seconds*.8)return false;
+ // O snapshot atual já foi persistido antes desta consulta; não duplicá-lo na janela.
+ const all=rows.filter(x=>Number.isFinite(Number(x.metric_value??x.value)));if(all.length<2)return false;
+ const bad=all.filter(x=>['warning','critical'].includes(x.state||thresholdState(Number(x.metric_value??x.value),t))).length;
+ return bad/all.length>=.8;
+}
+async function upsertIncident(signal,t,observedAt){
+ const fingerprint=`infra:${signal.source}:${signal.key}`;
+ let existing=[];try{existing=await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count,severity&limit=1`,{method:'GET'})}catch{}
+ const severity=signal.state==='critical'?'critical':'high';
+ if(existing[0]){
+  const row=existing[0];const nextStatus=row.status==='resolved'?'reopened':row.status;
+  const updated=await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',body:JSON.stringify({status:nextStatus,severity,occurrence_count:Number(row.occurrence_count||0)+1,last_seen_at:observedAt,metadata:{source:signal.source,metric_key:signal.key,value:signal.value,unit:signal.unit,warning:t.warning_value,critical:t.critical_value,sustain_seconds:t.sustain_seconds}})});
+  try{await rest('dev_incident_events',{method:'POST',body:JSON.stringify({incident_id:row.id,event_type:'signal_repeated',message:`${signal.label} permanece ${signal.state}.`,details:{value:signal.value,unit:signal.unit}})})}catch{}
+  return updated?.[0]||row;
+ }
+ const created=await rest('dev_incidents',{method:'POST',body:JSON.stringify({fingerprint,title:`${signal.label} em estado ${signal.state==='critical'?'crítico':'degradado'}`,module:'Infraestrutura',severity,status:'open',occurrence_count:1,affected_entities:0,first_seen_at:observedAt,last_seen_at:observedAt,source:'infrastructure',source_reference:`${signal.source}:${signal.key}`,metadata:{source:signal.source,metric_key:signal.key,value:signal.value,unit:signal.unit,warning:t.warning_value,critical:t.critical_value,sustain_seconds:t.sustain_seconds}})});
+ const incident=created?.[0];if(incident)try{await rest('dev_incident_events',{method:'POST',body:JSON.stringify({incident_id:incident.id,event_type:'opened',message:'Infrastructure & Resource Guardian abriu o incidente após a condição permanecer sustentada.',details:{signal,t}})})}catch{}
+ return incident||null;
+}
+async function markRecovered(signal,observedAt){
+ const fingerprint=`infra:${signal.source}:${signal.key}`;let rows=[];try{rows=await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&status=in.(open,investigating,reopened)&select=id,status&limit=1`,{method:'GET'})}catch{}
+ const row=rows?.[0];if(!row)return null;
+ await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',body:JSON.stringify({status:'mitigated',last_seen_at:observedAt,metadata:{recovered_signal:true,value:signal.value,unit:signal.unit}})});
+ try{await rest('dev_incident_events',{method:'POST',body:JSON.stringify({incident_id:row.id,event_type:'signal_recovered',message:'O sinal voltou à faixa saudável. Incidente marcado como mitigado e aguarda confirmação humana para resolução.',details:{value:signal.value,unit:signal.unit}})})}catch{}
+ return row.id;
+}
+async function persistScan(overview){
+ const observedAt=overview.generatedAt;const thresholds=await loadThresholds();const byKey=new Map(thresholds.map(t=>[`${t.source}:${t.metric_key}`,t]));const metrics=[];
+ for(const signal of overview.signals||[]){const t=byKey.get(`${signal.source}:${signal.key}`)||{warning_value:signal.warn,critical_value:signal.crit,comparator:'gte',sustain_seconds:900,label:signal.label};signal.state=thresholdState(signal.value,t);metrics.push({source:signal.source,metric_key:signal.key,metric_value:signal.value,unit:signal.unit,state:signal.state,dimensions:{label:signal.label},observed_at:observedAt});}
+ if(metrics.length)await rest('dev_metric_snapshots',{method:'POST',body:JSON.stringify(metrics)});
+ const p=overview.providers||{};const scans=[];
+ if(p.supabase?.configured!==false)scans.push({source:'supabase',status:p.supabase.ok?(overview.signals.some(s=>s.source==='supabase'&&s.state==='critical')?'critical':overview.signals.some(s=>s.source==='supabase'&&s.state==='warning')?'warning':'healthy'):(p.supabase.status||'down'),summary:{memory:p.supabase.metrics?.memory,swap:p.supabase.metrics?.swap,disk:p.supabase.metrics?.disk,rates:p.supabase.metrics?.rates,rawCounters:{cpuCounters:p.supabase.metrics?.cpuCounters,ioCounters:p.supabase.metrics?.ioCounters},oomKills:p.supabase.metrics?.oomKills,postgresRestarts:p.supabase.metrics?.postgresRestarts,errorCount:p.supabase.logs?.count||0},observed_at:observedAt});
+ if(p.devSupabase?.configured!==false)scans.push({source:'dev_supabase',status:p.devSupabase.ok?(overview.signals.some(s=>s.source==='dev_supabase'&&s.state==='critical')?'critical':overview.signals.some(s=>s.source==='dev_supabase'&&s.state==='warning')?'warning':'healthy'):(p.devSupabase.status||'down'),summary:{database:p.devSupabase.database,memory:p.devSupabase.metrics?.memory,swap:p.devSupabase.metrics?.swap,disk:p.devSupabase.metrics?.disk,rates:p.devSupabase.metrics?.rates,rawCounters:{cpuCounters:p.devSupabase.metrics?.cpuCounters,ioCounters:p.devSupabase.metrics?.ioCounters},oomKills:p.devSupabase.metrics?.oomKills,postgresRestarts:p.devSupabase.metrics?.postgresRestarts},observed_at:observedAt});
+ if(p.cloudflare?.configured!==false)scans.push({source:'cloudflare',status:p.cloudflare.ok?'healthy':(p.cloudflare.status||'down'),summary:{metrics:p.cloudflare.metrics,scriptName:p.cloudflare.scriptName},observed_at:observedAt});
+ scans.push({source:'dev_runtime',status:'healthy',summary:{metrics:p.runtime?.metrics},observed_at:observedAt});
+ if(p.vercel?.configured!==false)scans.push({source:'vercel',status:p.vercel.ok?'healthy':(p.vercel.status||'down'),summary:{latest:p.vercel.latest},observed_at:observedAt});
+ if(scans.length)await rest('dev_infra_scans',{method:'POST',body:JSON.stringify(scans)});
+ const incidents=[];const recovered=[];
+ for(const signal of overview.signals||[]){const t=byKey.get(`${signal.source}:${signal.key}`);if(!t)continue;if(['warning','critical'].includes(signal.state)){if(await sustained(signal.source,signal.key,{...signal,metric_value:signal.value},t,observedAt)){const inc=await upsertIncident(signal,t,observedAt);if(inc)incidents.push(inc)}}else if(signal.state==='healthy'){const id=await markRecovered(signal,observedAt);if(id)recovered.push(id)}}
+ return {observedAt,metricCount:metrics.length,scanCount:scans.length,incidentsOpenedOrUpdated:incidents.length,incidentsMitigated:recovered.length};
+}
+module.exports=async function handler(req,res){
+ if(!['GET','POST'].includes(req.method))return methodNotAllowed(res,['GET','POST']);res.setHeader('x-request-id',requestId(req));
+ const cron=cronAuthorized(req);
+ // GET é reservado ao scheduler autenticado; a UI usa POST + sessão/RBAC.
+ if(req.method==='GET'&&!cron)return json(res,401,{erro:'Execução agendada não autorizada.',codigo:'CRON_UNAUTHORIZED'});
+ let actor=null;if(!cron){actor=await requireSession(req,res,'agents.run');if(!actor)return}
+ try{const overview=await getInfraOverview({includeLogs:true});const result=await persistScan(overview);if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:result});return json(res,200,{ok:true,result,overall:overview.overall,signals:overview.signals})}catch(e){return json(res,500,{erro:'Falha ao executar o Infrastructure & Resource Guardian.',codigo:'INFRA_SCAN_FAILED',detalhe:e?.message||null})}
+};

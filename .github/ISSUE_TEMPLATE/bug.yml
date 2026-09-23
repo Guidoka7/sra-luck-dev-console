@@ -1,0 +1,31 @@
+name: Bug técnico
+about: Registrar falha do Dev Console
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Resumo
+      description: O que aconteceu?
+    validations:
+      required: true
+  - type: input
+    id: request_id
+    attributes:
+      label: Request ID
+      description: Informe quando disponível.
+  - type: input
+    id: sha
+    attributes:
+      label: SHA / release
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidências
+      description: Logs sanitizados, screenshot ou incidente relacionado. Nunca cole segredos/PII.
