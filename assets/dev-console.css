@@ -118,3 +118,16 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}b
 .dc-feed-item{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line2);font-size:9.6px;line-height:1.5}.dc-feed-item:last-child{border-bottom:0}
 .dc-ai-box{border:1px solid #4b3f77;background:#1a1733;border-radius:10px;padding:10px;font-size:9.6px;line-height:1.6;color:#e7e2ff}.dc-ai-box h4{margin:8px 0 4px;font-size:10px}.dc-ai-box ol,.dc-ai-box ul{margin:4px 0;padding-left:18px}.dc-ai-box code{background:#0b0a1a;padding:1px 4px;border-radius:4px}
 .dc-drawer .dc-agent-head{grid-template-columns:36px 1fr auto}.dc-drawer .dc-agent-avatar{width:36px;height:36px;border-radius:10px}.dc-drawer .dc-agent-avatar svg{width:18px}
+.dcc-root{--dcc-surface:#0f1d2e;display:grid;gap:8px}
+.dcc-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:9px;color:#8fa7c1}.dcc-legend-item{display:inline-flex;align-items:center;gap:6px}.dcc-legend-item b{color:#edf5ff}
+.dcc-key{display:inline-block;width:14px;height:2px;border-radius:2px}
+.dcc-plot{position:relative;width:100%}.dcc-plot svg{display:block;max-width:100%;height:auto}
+.dcc-grid{stroke:#1a2d43;stroke-width:1}.dcc-axis{fill:#6f87a1;font-size:9px;font-family:inherit}
+.dcc-ref{stroke:#665125;stroke-width:1;stroke-dasharray:4 4}.dcc-ref.bad{stroke:#6b303c}
+.dcc-hair{stroke:#8fa7c1;stroke-width:1;stroke-dasharray:2 3}
+.dcc-tooltip{position:absolute;z-index:3;pointer-events:none;background:#0a1624;border:1px solid #29415c;border-radius:8px;padding:7px 9px;min-width:140px;box-shadow:0 10px 24px rgba(0,0,0,.35);font-size:9px}
+.dcc-tip-time{color:#8fa7c1;margin-bottom:4px}.dcc-tip-row{display:grid;grid-template-columns:14px auto 1fr;gap:6px;align-items:center;color:#a8bdd0}.dcc-tip-row b{color:#fff;font-size:10px}
+.dcc-table summary{cursor:pointer;color:#6f87a1;font-size:8.6px}.dcc-table table{margin-top:6px}
+.dc-mem-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}@media(max-width:1000px){.dc-mem-grid{grid-template-columns:1fr}}
+.dc-mem-card{border:1px solid var(--line2);background:#0f1d2e;border-radius:12px;padding:12px;display:grid;gap:8px;align-content:start}
+.dc-mem-card-head{display:grid;grid-template-columns:28px 1fr auto;gap:9px;align-items:center}.dc-mem-card-head img{width:22px;height:22px;background:#fff;border-radius:6px;padding:3px}.dc-mem-card-head strong{font-size:10.6px;display:block}.dc-mem-card-head small{color:var(--muted);font-size:8.4px}

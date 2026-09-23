@@ -167,6 +167,18 @@ module.exports=async function handler(req,res){
    }
   }
 
+  if(mode==='history'&&req.query?.series){
+   // Várias séries de uma vez: series=supabase:memory_usage_percent,cloudflare:worker_memory_p99_percent
+   const keys=String(req.query.series).split(',').map(x=>x.trim()).filter(x=>/^[a-z0-9_-]{1,60}:[a-z0-9_.-]{1,100}$/i.test(x)).slice(0,16);
+   const hours=Math.min(Math.max(Number(req.query?.hours||24),1),720);
+   const since=new Date(Date.now()-hours*3600000).toISOString();
+   try{
+    const out={};
+    await Promise.all(keys.map(async k=>{const [source,metric]=k.split(':');out[k]=await rest(`dev_metric_snapshots?source=eq.${encodeURIComponent(source)}&metric_key=eq.${encodeURIComponent(metric)}&observed_at=gte.${encodeURIComponent(since)}&select=metric_value,state,observed_at&order=observed_at.asc&limit=2000`,{method:'GET'})}));
+    return json(res,200,{ok:true,hours,since,series:out,runtime:runtimeMetrics().metrics});
+   }catch(_){return json(res,503,{erro:'Não foi possível carregar o histórico de infraestrutura.',codigo:'INFRA_HISTORY_UNAVAILABLE'})}
+  }
+
   if(mode==='history'){
    const source=String(req.query?.source||'supabase').replace(/[^a-z0-9_-]/gi,'').slice(0,60);
    const metric=String(req.query?.metric||'memory_usage_percent').replace(/[^a-z0-9_.-]/gi,'').slice(0,100);

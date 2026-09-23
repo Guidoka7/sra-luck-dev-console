@@ -72,6 +72,7 @@ Só HTTPS público (endereços privados/internos bloqueados, sem seguir redireci
 - `GET /api/infra-supabase?hours=1|6|24` — métricas + erros do Supabase Sra Luck
 - `GET /api/infra-dev-supabase` — saúde/métricas do Supabase próprio do Dev Console
 - `GET /api/infra-history?source=&metric=&hours=` — histórico persistido de recursos
+- `GET /api/infra-history?series=fonte:metrica,...&hours=` — várias séries de uma vez (até 16), usado pelos gráficos de memória
 - `GET /api/infra-cloudflare` — Worker CPU/memory/request/error metrics
 - `GET /api/infra-vercel` — deploys Vercel + runtime atual
 - `GET /api/infra-runtime` — memória do runtime atual do Dev Console
