@@ -170,6 +170,57 @@ async function fetchSupabaseLogs(hours=1){
  }catch(e){return {configured:true,ok:false,status:'degraded',items:[],message:e?.message||'Falha ao consultar logs do Supabase.'}}
 }
 
+async function fetchSraStorage(){
+ const base=String(process.env.SRA_LUCK_BASE_URL||'https://sra-luck-react.vercel.app').replace(/\/$/,'');
+ const token=String(process.env.SRA_LUCK_SERVICE_TOKEN||'').trim();
+ if(!token)return {source:'storage',configured:false,ok:false,status:'not_configured',message:'Configure SRA_LUCK_SERVICE_TOKEN para validar o Storage principal.'};
+ try{
+  const {response,ms}=await timedFetch(base+'/api/admin/monitoramento-storage',{headers:{Accept:'application/json','x-dev-console-token':token,'x-dev-actor-id':'infra-guardian','x-dev-actor-role':'owner'}},12000);
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)return {source:'storage',configured:true,ok:false,status:response.status===503?'degraded':'down',httpStatus:response.status,latencyMs:ms,message:data?.erro||`Storage monitor HTTP ${response.status}.`,checks:data?.checks||[]};
+  return {source:'storage',configured:true,ok:Boolean(data?.ok),status:data?.ok?'healthy':'degraded',latencyMs:ms,totalBuckets:data?.totalBuckets??null,checks:data?.checks||[],generatedAt:data?.geradoEm||null,message:data?.ok?null:'Há bucket crítico ausente, público ou inacessível.'};
+ }catch(e){return {source:'storage',configured:true,ok:false,status:'down',message:e?.name==='AbortError'?'Timeout ao validar Storage.':(e?.message||'Falha ao validar Storage.')}}
+}
+
+function pickBackupRows(data){
+ if(Array.isArray(data))return data;
+ for(const key of ['backups','items','data','results'])if(Array.isArray(data?.[key]))return data[key];
+ return [];
+}
+function backupTimestamp(item){
+ for(const key of ['completed_at','completedAt','created_at','createdAt','inserted_at','insertedAt','started_at','startedAt','timestamp']){
+  const v=item?.[key];if(v&&Number.isFinite(new Date(v).getTime()))return new Date(v).toISOString();
+ }
+ return null;
+}
+async function fetchSupabaseBackups(){
+ const ref=String(process.env.SRA_SUPABASE_PROJECT_REF||'').trim();
+ const token=String(process.env.SRA_SUPABASE_ACCESS_TOKEN||'').trim();
+ if(!ref||!token)return {source:'backups',configured:false,ok:false,status:'not_configured',message:'Configure o acesso de observabilidade do Supabase para validar backups.'};
+ try{
+  const {response,ms}=await timedFetch(`https://api.supabase.com/v1/projects/${encodeURIComponent(ref)}/database/backups`,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'}},12000);
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)return {source:'backups',configured:true,ok:false,status:'degraded',httpStatus:response.status,latencyMs:ms,message:data?.message||data?.error||`Backups API HTTP ${response.status}.`};
+  const rows=pickBackupRows(data);
+  const dated=rows.map(x=>({item:x,at:backupTimestamp(x)})).filter(x=>x.at).sort((a,b)=>new Date(b.at)-new Date(a.at));
+  const latest=dated[0]||null;
+  const ageHours=latest?Math.max(0,(Date.now()-new Date(latest.at).getTime())/3600000):null;
+  const status=ageHours==null?'degraded':ageHours>=60?'critical':ageHours>=36?'warning':'healthy';
+  return {source:'backups',configured:true,ok:status==='healthy'||status==='warning',status,latencyMs:ms,count:rows.length,latestAt:latest?.at||null,ageHours,latest:latest?.item||null,message:latest?null:'A API não retornou um backup com data identificável.'};
+ }catch(e){return {source:'backups',configured:true,ok:false,status:'down',message:e?.name==='AbortError'?'Timeout ao consultar backups do Supabase.':(e?.message||'Falha ao consultar backups do Supabase.')}}
+}
+
+async function fetchGuardianFreshness(){
+ try{
+  const rows=await rest('dev_infra_scans?select=source,status,observed_at&order=observed_at.desc&limit=1',{method:'GET'});
+  const last=rows?.[0]||null;
+  if(!last)return {source:'guardian',configured:true,ok:false,status:'degraded',lastRunAt:null,ageHours:null,message:'Nenhuma coleta persistida do Guardian ainda.'};
+  const ageHours=Math.max(0,(Date.now()-new Date(last.observed_at).getTime())/3600000);
+  const status=ageHours>=36?'critical':ageHours>=27?'warning':'healthy';
+  return {source:'guardian',configured:true,ok:status==='healthy'||status==='warning',status,lastRunAt:last.observed_at,ageHours,lastSource:last.source,lastStatus:last.status};
+ }catch(e){return {source:'guardian',configured:true,ok:false,status:'down',lastRunAt:null,ageHours:null,message:e?.message||'Falha ao consultar a última coleta do Guardian.'}}
+}
+
 async function fetchCloudflareWorker(){
  const account=String(process.env.CLOUDFLARE_ACCOUNT_ID||'').trim(),token=String(process.env.CLOUDFLARE_API_TOKEN||'').trim(),script=String(process.env.CLOUDFLARE_WORKER_SCRIPT||'').trim();
  if(!account||!token||!script)return {source:'cloudflare',configured:false,ok:false,status:'not_configured',message:'Configure CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN e CLOUDFLARE_WORKER_SCRIPT.'};
@@ -208,7 +259,7 @@ async function fetchVercel(){
 }
 
 function statusFromPct(value,warn,crit){if(value==null)return 'unknown';if(value>=crit)return'critical';if(value>=warn)return'warning';return'healthy'}
-function buildSignals({supabase,devSupabase,cloudflare,runtime}){
+function buildSignals({supabase,devSupabase,cloudflare,runtime,storage,backups,guardian}){
  const out=[]; const add=(source,key,label,value,unit,warn,crit,extra={})=>out.push({source,key,label,value,unit,warn,crit,state:statusFromPct(value,warn,crit),...extra});
  const availability=(provider,source,label)=>{if(provider?.configured!==false)add(source,'provider_unavailable',`${label} · disponibilidade`,provider?.ok?0:1,'flag',1,1,{hidden:true,providerStatus:provider?.status||null})};
  availability(supabase,'supabase','Supabase Sra Luck · fonte de observabilidade');
@@ -234,21 +285,33 @@ function buildSignals({supabase,devSupabase,cloudflare,runtime}){
  const rm=runtime?.metrics;
  // heapUsagePercent é exibido para diagnóstico, mas não abre incidente: o V8 ajusta o heap dinamicamente.
  if(rm?.rssUsagePercent!=null)add('dev_runtime','rss_usage_percent','Dev Console · RSS',rm.rssUsagePercent,'%',75,90,{raw:{rssBytes:rm.rssBytes,limitBytes:rm.memoryLimitBytes}});
+ if(storage?.configured!==false)add('storage','storage_unavailable','Storage · buckets críticos',storage?.ok?0:1,'flag',1,1,{raw:{checks:storage?.checks||[]}});
+ if(backups?.ageHours!=null)add('backups','backup_age_hours','Backup · idade da última cópia',backups.ageHours,'h',36,60,{raw:{latestAt:backups.latestAt}});
+ if(guardian?.ageHours!=null)add('guardian','guardian_age_hours','Guardian · tempo desde a última coleta',guardian.ageHours,'h',27,36,{raw:{lastRunAt:guardian.lastRunAt}});
  return out;
 }
 
 async function getInfraOverview({includeLogs=true}={}){
- const [supabase,devSupabase,cloudflare,vercel,logs]=await Promise.all([fetchSupabaseMetrics(),fetchDevSupabaseMetrics(),fetchCloudflareWorker(),fetchVercel(),includeLogs?fetchSupabaseLogs(1):Promise.resolve(null)]);
- const runtime=runtimeMetrics(); const signals=buildSignals({supabase,devSupabase,cloudflare,runtime});
+ const [supabase,devSupabase,cloudflare,vercel,logs,storage,backups,guardian]=await Promise.all([
+  fetchSupabaseMetrics(),
+  fetchDevSupabaseMetrics(),
+  fetchCloudflareWorker(),
+  fetchVercel(),
+  includeLogs?fetchSupabaseLogs(1):Promise.resolve(null),
+  fetchSraStorage(),
+  fetchSupabaseBackups(),
+  fetchGuardianFreshness(),
+ ]);
+ const runtime=runtimeMetrics(); const signals=buildSignals({supabase,devSupabase,cloudflare,runtime,storage,backups,guardian});
  let incidents=[];try{incidents=await rest('dev_incidents?source=eq.infrastructure&status=in.(open,investigating,mitigated,reopened)&select=id,fingerprint,title,module,severity,status,occurrence_count,first_seen_at,last_seen_at,metadata&order=last_seen_at.desc&limit=30',{method:'GET'})}catch{}
- const providers=[supabase,devSupabase,cloudflare,vercel,runtime];
+ const providers=[supabase,devSupabase,cloudflare,vercel,runtime,storage,backups,guardian];
  const states=providers.filter(x=>x.configured!==false).map(x=>x.status);
  const missingProviders=providers.filter(x=>x.configured===false).map(x=>x.source);
  let overall='healthy';
- if(states.includes('down')||signals.some(s=>s.state==='critical'))overall='critical';
- else if(states.includes('degraded')||signals.some(s=>s.state==='warning'))overall='degraded';
+ if(states.includes('down')||states.includes('critical')||signals.some(s=>s.state==='critical'))overall='critical';
+ else if(states.includes('degraded')||states.includes('warning')||signals.some(s=>s.state==='warning'))overall='degraded';
  else if(missingProviders.length)overall='incomplete';
- return {ok:true,generatedAt:nowIso(),overall,configurationComplete:missingProviders.length===0,missingProviders,signals,providers:{supabase:{...supabase,logs},devSupabase,cloudflare,vercel,runtime},incidents};
+ return {ok:true,generatedAt:nowIso(),overall,configurationComplete:missingProviders.length===0,missingProviders,signals,providers:{supabase:{...supabase,logs},devSupabase,cloudflare,vercel,runtime,storage,backups,guardian},incidents};
 }
 
-module.exports={parsePrometheus,deriveSupabaseMetrics,deriveRates,fetchSupabaseMetrics,fetchDevSupabaseMetrics,fetchSupabaseLogs,fetchCloudflareWorker,fetchVercel,runtimeMetrics,buildSignals,getInfraOverview,mb,gb,pct};
+module.exports={parsePrometheus,deriveSupabaseMetrics,deriveRates,fetchSupabaseMetrics,fetchDevSupabaseMetrics,fetchSupabaseLogs,fetchSraStorage,fetchSupabaseBackups,fetchGuardianFreshness,fetchCloudflareWorker,fetchVercel,runtimeMetrics,buildSignals,getInfraOverview,mb,gb,pct};

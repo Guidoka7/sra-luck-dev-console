@@ -63,6 +63,9 @@ async function persistScan(overview){
  if(p.cloudflare?.configured!==false)scans.push({source:'cloudflare',status:p.cloudflare.ok?'healthy':(p.cloudflare.status||'down'),summary:{metrics:p.cloudflare.metrics,scriptName:p.cloudflare.scriptName},observed_at:observedAt});
  scans.push({source:'dev_runtime',status:'healthy',summary:{metrics:p.runtime?.metrics},observed_at:observedAt});
  if(p.vercel?.configured!==false)scans.push({source:'vercel',status:p.vercel.ok?'healthy':(p.vercel.status||'down'),summary:{latest:p.vercel.latest},observed_at:observedAt});
+ if(p.storage?.configured!==false)scans.push({source:'storage',status:p.storage.ok?'healthy':(p.storage.status||'down'),summary:{checks:p.storage.checks,totalBuckets:p.storage.totalBuckets,latencyMs:p.storage.latencyMs},observed_at:observedAt});
+ if(p.backups?.configured!==false)scans.push({source:'backups',status:p.backups.status||'unknown',summary:{latestAt:p.backups.latestAt,ageHours:p.backups.ageHours,count:p.backups.count,latencyMs:p.backups.latencyMs},observed_at:observedAt});
+ scans.push({source:'guardian',status:p.guardian?.status||'healthy',summary:{previousRunAt:p.guardian?.lastRunAt,ageHours:p.guardian?.ageHours},observed_at:observedAt});
  if(scans.length)await rest('dev_infra_scans',{method:'POST',body:JSON.stringify(scans)});
  const incidents=[];const recovered=[];
  for(const signal of overview.signals||[]){const t=byKey.get(`${signal.source}:${signal.key}`);if(!t)continue;if(['warning','critical'].includes(signal.state)){if(await sustained(signal.source,signal.key,{...signal,metric_value:signal.value},t,observedAt)){const inc=await upsertIncident(signal,t,observedAt);if(inc)incidents.push(inc)}}else if(signal.state==='healthy'){const id=await markRecovered(signal,observedAt);if(id)recovered.push(id)}}
