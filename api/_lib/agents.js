@@ -121,7 +121,7 @@ async function briefing(actor) {
     ok: true,
     geradoEm: new Date().toISOString(),
     configurado: found.configurado,
-    ia: { configurada: ai.configured(), provedor: 'Google Gemini (camada gratuita)' },
+    ia: { configurada: await ai.configured(), provedor: 'Google Gemini (camada gratuita)' },
     resumo: resumoDoDia(found, infraRuins, boas, found.configurado),
     contagem: { ...found.resumo, infra: infraRuins.length },
     agentes,
