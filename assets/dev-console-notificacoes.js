@@ -274,14 +274,14 @@
   }
 
   function tabEventos() {
-    const grupos = [
-      ['Financeiro', ['Pagamento confirmado', 'Comprovante recebido', 'Comprovante aprovado', 'Comprovante recusado', 'Parcela regularizada']],
-      ['Agenda', ['Termos agendados / reagendados', 'Lembrete de termos', 'Cirurgia agendada / reagendada', 'Lembrete de cirurgia']],
-      ['Jornada', ['Elegibilidade atingida', 'Solicitação de liberação recebida', 'Entrada em Levantamentos', 'Termos confirmados', 'Entrada em Liberações Financeiras', 'Liberação cirúrgica disponível', 'Cirurgia confirmada']],
-      ['App', ['Acesso liberado', 'Requisito pendente']],
-    ];
-    return `<div class="dc-warn-box">Estes eventos <b>ainda não geram notificação</b> no Sra Luck: hoje nenhum desses fluxos chama o envio. Eles serão ligados na próxima etapa, cada um com a opção “Automático” ou “Exigir aprovação”.</div>
-      ${grupos.map(([g, evs]) => `<h3 class="dc-nc-h">${g}</h3><div class="dc-list">${evs.map((e) => `<div class="dc-row" style="grid-template-columns:1fr auto"><span>${esc(e)}</span>${DC.chip('Não conectado', 'neutral')}</div>`).join('')}</div>`).join('')}`;
+    return `<div class="dc-note"><b>Avisos da jornada conectados.</b> Pagamentos, agenda, jornada/liberação e Clube são disparados pelo caminho único da migration 093 e entregues no app + Web Push. Os textos, estado ligado/desligado e restauração do padrão ficam na página principal de Notificações.</div>
+      <div class="dc-ip-kpis" style="margin-top:8px">
+        <div><small>Pagamentos</small><b>Conectado</b></div>
+        <div><small>Agenda</small><b>Conectado</b></div>
+        <div><small>Jornada</small><b>Conectado</b></div>
+        <div><small>Clube</small><b>Conectado</b></div>
+      </div>
+      <div class="dc-note" style="margin-top:8px">Esta Central continua responsável pelos lotes financeiros com Gemini. Os avisos de evento são independentes dela e não precisam de aprovação de lote.</div>`;
   }
 
   function tabRelatorios() {
