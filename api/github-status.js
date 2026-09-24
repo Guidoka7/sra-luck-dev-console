@@ -134,7 +134,7 @@ async function changes() {
     ok: true, geradoEm: new Date().toISOString(), repo: repos.sra,
     fontes: { github: commitsR.ok ? 'ok' : commitsR.erro, vercel: dep.configured === false ? (dep.erro || 'não configurado') : 'ok' },
     main, commits, runs, ci: runs[0] || null, migrations,
-    deploy: { configured: dep.configured !== false, erro: dep.erro || null, producao, recentes: (dep.deployments || []).slice(0, 8) },
+    deploy: { configured: dep.configured !== false, erro: dep.erro || null, producao, recentes: (dep.deployments || []).slice(0, 12) },
     sincronia,
   };
 }

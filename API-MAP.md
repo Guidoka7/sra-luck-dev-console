@@ -48,6 +48,7 @@ A autorização real do Sra Luck continua existindo do outro lado; o RBAC do Dev
 ## Central de Problemas
 
 - `GET /api/problemas` — detecta problemas em plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações (`monitoring.view`).
+  - cada problema com incidente aberto em `dev_incidents` traz `incidente: { status, desde, ultimaVez, varreduras }`; `desde` só é preenchido quando o incidente está aberto (um incidente reaberto não serve de início). A Visão Geral usa `desde` para cruzar o problema com deploys e migrations.
 - `POST /api/problemas` — `{ problema, acao, params? }` aplica uma correção do registro fechado e verifica se o problema sumiu. A permissão depende da ação:
   - `notificacoes.verificar_atrasos` / `notificacoes.verificar_vencimentos` → `notifications.manage` (seguro, L2)
   - `integracoes.testar` → `integrations.manage` (seguro, L2)

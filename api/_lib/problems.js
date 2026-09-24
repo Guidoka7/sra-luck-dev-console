@@ -314,6 +314,23 @@ function sinaisPositivos(data, fontes, custom) {
   };
 }
 
+// Desde quando cada problema existe, a partir do incidente já registrado pela
+// varredura (dev_incidents, source=problems). Sem registro, `desde` fica como o
+// detector informou (ou vazio): nada é estimado.
+async function anexarHistorico(problemas) {
+  if (!problemas.length) return;
+  let rows = [];
+  try { rows = await rest('dev_incidents?source=eq.problems&status=in.(open,investigating,reopened)&select=fingerprint,status,first_seen_at,last_seen_at,occurrence_count&order=first_seen_at.desc&limit=300', { method: 'GET' }); } catch { return; }
+  const porChave = new Map((Array.isArray(rows) ? rows : []).map((r) => [r.fingerprint, r]));
+  for (const p of problemas) {
+    const r = porChave.get(`problem:${p.fingerprint}`);
+    if (!r) continue;
+    p.incidente = { status: r.status, desde: r.first_seen_at, ultimaVez: r.last_seen_at, varreduras: r.occurrence_count };
+    // Reaberto: first_seen_at é da primeira ocorrência antiga, não do início desta; não serve de âncora.
+    if (!p.desde && r.status !== 'reopened') p.desde = r.first_seen_at;
+  }
+}
+
 async function detect(actor) {
   const [{ data, fontes }, custom] = await Promise.all([collect(actor), customApis.checkAll().catch(() => ({ available: false, apis: [] }))]);
   const problemas = [];
@@ -327,6 +344,7 @@ async function detect(actor) {
   detectIntegrations(data, problemas);
   detectCustomApis(custom.apis, problemas);
   for (const p of problemas) p.explicacao = explicar(p);
+  await anexarHistorico(problemas);
   problemas.sort((a, b) => (SEVERITY_RANK[a.severidade] - SEVERITY_RANK[b.severidade]) || (b.ocorrencias - a.ocorrencias));
   const count = (s) => problemas.filter(p => p.severidade === s).length;
   const configurado = Boolean(sraConfig().token);

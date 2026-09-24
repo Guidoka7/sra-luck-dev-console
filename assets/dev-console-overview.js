@@ -62,6 +62,16 @@
     return 'API e rotinas';
   };
   const errosDesde = (area, horas) => eventos().filter((e) => (!area || areaDoEvento(e) === area) && Date.now() - new Date(e.criado_em).getTime() <= horas * 3600000);
+  // Erros por período a partir dos eventos carregados. Se a lista veio cheia (limite), não há dado antes
+  // do evento mais antigo: a série começa ali, sem inventar zeros.
+  const LIMITE_EVENTOS = 250;
+  const inicioEventos = () => { const ev = eventos(); return ev.length >= LIMITE_EVENTOS ? Math.min(...ev.map((e) => new Date(e.criado_em).getTime())) : null; };
+  function serieErros(area, from, to, passo) {
+    const ini = Math.max(from, Math.floor((inicioEventos() ?? from) / passo) * passo), b = new Map();
+    for (let t = ini; t <= to; t += passo) b.set(t, 0);
+    for (const e of eventos()) { const t = new Date(e.criado_em).getTime(); if (t < ini || areaDoEvento(e) !== area) continue; const k = ini + Math.floor((t - ini) / passo) * passo; b.set(k, (b.get(k) || 0) + 1); }
+    return [...b].map(([t, v]) => ({ t, v }));
+  }
   const piorSinal = (...sinais) => { const ss = sinais.filter(Boolean); return ss.some((s) => s.state === 'critical') ? 'bad' : ss.some((s) => s.state === 'warning') ? 'warn' : ss.length ? 'ok' : null; };
 
   // ------------------------------------------------------------- componentes
@@ -75,9 +85,9 @@
       const f = fs.find((x) => x.id === 'app'), rel = ps.filter((p) => p.dominio === 'app'), e24 = errosDesde('App da cliente', 24), fatais = e24.filter((e) => e.nivel === 'fatal').length;
       const tone = !prob() ? 'neutral' : !f || f.naoConfigurado ? 'neutral' : !f.ok ? 'bad' : graves(rel).length || fatais ? 'warn' : rel.length ? 'warn' : 'ok';
       out.push({ id: 'app', nome: 'App da cliente', icone: 'smartphone', tone, href: 'app-cliente.html', pagina: 'Clientes & App',
-        frase: tone === 'neutral' ? 'Sem conector com o Sra Luck: não dá para testar o app daqui.' : tone === 'bad' ? `O monitoramento do app não respondeu (HTTP ${f.status || 'sem resposta'}).` : rel.length ? `Funciona, com ${rel.length} ponto(s) de atenção: ${rel[0].titulo}.` : 'Respondendo normalmente.',
+        frase: tone === 'neutral' ? 'Sem conector com o Sra Luck: não dá para testar o app daqui.' : tone === 'bad' ? `O monitoramento do app não respondeu (HTTP ${f.status || 'sem resposta'}).` : rel.length ? `Funciona, com ${rel.length} ponto(s) de atenção: ${rel[0].titulo}.` : fatais ? `Funciona, mas teve ${fatais} erro(s) fatal(is) nas últimas 24 h.` : 'Respondendo normalmente.',
         metrica: V.errors?.ok ? `${e24.length} erro(s) em 24 h` : '', relacionados: rel,
-        medidas: [['Teste do app', f ? (f.ok ? `OK · ${ms(f.ms)}` : `Falhou · HTTP ${f.status || '—'}`) : '—'], ['Erros em 24 h', V.errors?.ok ? String(e24.length) : 'indisponível'], ['Erros fatais em 24 h', V.errors?.ok ? String(fatais) : 'indisponível']] });
+        medidas: [['Teste do app', f ? (f.ok ? `OK · ${ms(f.ms)}` : `Falhou · HTTP ${f.status || '—'}`) : '—', 'teste'], ['Erros em 24 h', V.errors?.ok ? String(e24.length) : 'indisponível'], ['Erros fatais em 24 h', V.errors?.ok ? String(fatais) : 'indisponível']] });
     }
     // Admin
     {
@@ -86,7 +96,7 @@
       out.push({ id: 'admin', nome: 'Admin', icone: 'layout-dashboard', tone, href: 'sistema.html', pagina: 'Admin Sra Luck',
         frase: tone === 'neutral' ? 'Sem conector com o Sra Luck: as funções do Admin não puderam ser testadas.' : falhas.length ? `${falhas.length} função(ões) do Admin sem resposta: ${falhas.map((x) => x.label).slice(0, 2).join(', ')}.` : graves(rel).length ? `Funções respondendo, mas ${graves(rel).length} problema(s) importante(s) na operação.` : `Todas as ${fa.length} funções testadas responderam.`,
         metrica: fa.length ? `${fa.length - falhas.length}/${fa.length} funções` : '', relacionados: rel,
-        medidas: fa.map((x) => [x.label, x.ok ? `OK · ${ms(x.ms)}` : `Falhou · HTTP ${x.status || '—'}`]).concat([['Erros em 24 h', V.errors?.ok ? String(e24.length) : 'indisponível']]) });
+        medidas: fa.map((x) => [x.label, x.ok ? `OK · ${ms(x.ms)}` : `Falhou · HTTP ${x.status || '—'}`, 'teste']).concat([['Erros em 24 h', V.errors?.ok ? String(e24.length) : 'indisponível']]) });
     }
     // API / Worker
     {
@@ -95,7 +105,7 @@
       out.push({ id: 'api', nome: 'API / Worker', icone: 'server', tone, href: 'infraestrutura.html', pagina: 'Infraestrutura',
         frase: tone === 'bad' && !r.ok ? 'A API do Sra Luck não está pronta: App e Admin podem não carregar.' : er?.state && er.state !== 'healthy' ? `Taxa de erro do Worker em ${pct(er.value)}.` : (r?.ms || 0) > 1500 ? `API lenta: prontidão levou ${ms(r.ms)}.` : 'API pronta e respondendo.',
         metrica: r?.ok ? ms(r.ms) : r ? `HTTP ${r.status || '—'}` : '', relacionados: [],
-        medidas: [['/api/health', h ? (h.ok ? `OK · ${ms(h.ms)}` : `Falhou · HTTP ${h.status || '—'}`) : '—'], ['/api/ready', r ? (r.ok ? `OK · ${ms(r.ms)}` : `Falhou · HTTP ${r.status || '—'}`) : '—'], ['Taxa de erro do Worker', er ? pct(er.value) : 'sem leitura']] });
+        medidas: [['/api/health', h ? (h.ok ? `OK · ${ms(h.ms)}` : `Falhou · HTTP ${h.status || '—'}`) : '—'], ['/api/ready', r ? (r.ok ? `OK · ${ms(r.ms)}` : `Falhou · HTTP ${r.status || '—'}`) : '—', 'teste'], ['Taxa de erro do Worker', er ? pct(er.value) : 'sem leitura']] });
     }
     // Supabase
     {
@@ -134,28 +144,130 @@
         metrica: mem ? `Mem P99 ${pct(mem.value)}` : '', relacionados: [],
         medidas: [['Memória P99', mem ? pct(mem.value) : 'sem leitura'], ['Taxa de erro', er ? pct(er.value) : 'sem leitura'], ['Requisições (janela)', p?.metrics?.requests != null ? String(p.metrics.requests) : '—']] });
     }
+    for (const c of out) c.relacionados = problemas().filter((p) => compDoProblema(p) === c.id);
     return out;
   }
 
+  // ------------------------------------------------------------- dependências
+  // Arquitetura real do sra-luck-react: App e Admin são o mesmo SPA (Vite) publicado na Vercel e
+  // chamam /api/*, que roda o código de worker/ (Edge Function da Vercel em api/[...path].ts; o mesmo
+  // Worker tem configuração Cloudflare em wrangler.jsonc). A API lê e grava no Supabase e no Storage.
+  const DEPS = { app: ['api'], admin: ['api'], api: ['supabase', 'storage'], storage: ['supabase'], supabase: [], vercel: [], cloudflare: [] };
+  const HOSPEDAGEM = { app: 'vercel', admin: 'vercel', api: 'vercel' };
+  const RELACIONADO = { api: ['cloudflare'], cloudflare: ['api'] };
+  const dependentes = (id) => Object.keys(DEPS).filter((k) => DEPS[k].includes(id));
+  function compDoProblema(p) {
+    const id = String(p.id || '');
+    if (id.startsWith('plataforma:diagnostico')) return 'supabase';
+    if (id === 'plataforma:storage') return 'storage';
+    if (p.dominio === 'plataforma') return 'api';
+    if (p.dominio === 'app') return 'app';
+    if (ADMIN_AREAS.includes(p.dominio)) return 'admin';
+    return null;
+  }
+  const COMP_DA_INFRA = { supabase: 'supabase', backups: 'supabase', cloudflare: 'cloudflare', storage: 'storage' };
+
+  // ------------------------------------------------------------- mudanças e correlação
+  // Só entram mudanças que podem alterar produção: deploys de produção e migrations na main.
+  const H = 3600000, ANTES = 6 * H, TOLERANCIA = 15 * 60000;
+  const dur = (v) => { const m = Math.max(1, Math.round(Math.abs(v) / 60000)); return m < 60 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} dias`; };
+  function mudancas() {
+    const c = V.changes?.ok ? V.changes.data : null; if (!c) return [];
+    const out = [];
+    for (const d of c.deploy?.recentes || []) if (d.target === 'production' && d.createdAt) out.push({ tipo: 'deploy', t: Number(d.createdAt), titulo: d.message || 'Deploy de produção', ref: (d.sha || '').slice(0, 7) || 'sem commit', estado: d.state, atual: d.current });
+    for (const m of c.migrations?.itens || []) if (m.alteradaEm) out.push({ tipo: 'migration', t: Date.parse(m.alteradaEm), titulo: m.arquivo, ref: (m.commit || '').slice(0, 7) });
+    return out.filter((x) => Number.isFinite(x.t)).sort((a, b) => b.t - a.t);
+  }
+  // Mudanças entre 6 h antes e 15 min depois do início (tolerância de relógio). Proximidade no tempo é pista, não prova.
+  function mudancasPerto(ancora) {
+    const t0 = Date.parse(ancora || ''); if (!Number.isFinite(t0)) return [];
+    return mudancas().filter((m) => m.t >= t0 - ANTES && m.t <= t0 + TOLERANCIA).map((m) => ({ ...m, delta: t0 - m.t })).sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
+  }
+  const quandoRel = (m) => (m.delta == null ? quando(new Date(m.t).toISOString()) : m.delta >= 0 ? `${dur(m.delta)} antes do início` : 'junto com o início');
+  const chipMudanca = (m) => `<span class="dc-ov-link-chip ${m.tipo}"><i data-lucide="${m.tipo === 'deploy' ? 'rocket' : 'database'}"></i>${m.tipo === 'deploy' ? `Deploy ${esc(m.ref)}` : esc(m.titulo.replace(/^migration_/, '').replace(/\.sql$/, ''))} · ${esc(quandoRel(m))}</span>`;
+
+  // Causas mais comuns de cada sinal de infraestrutura (texto fixo, marcado como hipótese).
+  const CAUSA_INFRA = {
+    memory_usage_percent: 'Consultas pesadas, conexões demais ou dados crescendo além do que o plano do banco comporta.',
+    swap_usage_percent: 'Falta de RAM: o banco passou a usar disco como memória.',
+    cpu_usage_percent: 'Consultas sem índice ou alguma rotina pesada rodando.',
+    disk_usage_percent: 'Crescimento de dados e logs (monitoramento, auditoria) sem limpeza.',
+    oom_kills_delta: 'Memória esgotada: o banco derrubou processos.',
+    postgres_restarts_delta: 'Reinício do banco (manutenção do Supabase, falta de memória ou falha).',
+    worker_memory_p99_percent: 'Respostas muito grandes ou objetos acumulando em memória no Worker.',
+    worker_error_rate_percent: 'Requisições falhando no Worker; os erros 5xx aparecem na Central de Problemas.',
+    backup_age_hours: 'O backup automático não rodou ou o plano não tem backup diário.',
+    guardian_age_hours: 'O agendador (cron da Vercel ou GitHub Actions) não está disparando a varredura, ou o CRON_SECRET não confere.',
+    storage_unavailable: 'Bucket ausente, sem permissão ou credencial do Storage inválida.',
+    provider_unavailable: 'A credencial da fonte de monitoramento expirou ou está errada.',
+  };
+
+  function diagnosticar(i, byId) {
+    const perto = mudancasPerto(i.ancora), dep = perto.find((m) => m.tipo === 'deploy'), mig = perto.find((m) => m.tipo === 'migration');
+    const sinc = V.changes?.ok ? V.changes.data.sincronia : null, s = i.http == null ? null : Number(i.http) || 0;
+    const base = [], partes = [];
+    let forca = 'hipotese';
+    const raiz = (DEPS[i.comp] || []).map((id) => byId[id]).find((c) => c?.tone === 'bad');
+    if (raiz) { partes.push(`Efeito provável de ${raiz.nome}, que está com falha: ${raiz.frase}`); base.push(`${raiz.nome} com falha agora`); forca = 'evidencia'; }
+    else if (s != null) {
+      base.push(s ? `resposta HTTP ${s}` : 'sem resposta do servidor');
+      forca = 'evidencia';
+      if (s === 0) partes.push('O servidor não respondeu a tempo: API fora do ar, travada ou lenta demais.');
+      else if (s === 401 || s === 403) partes.push('Acesso negado: token do conector, permissão do cargo ou allowlist M2M. Não indica código quebrado.');
+      else if (s === 404) partes.push(sinc?.estado === 'producao_atras' ? `A rota não existe na versão publicada, e a produção está ${sinc.commitsAtras} commit(s) atrás da main: ela pode existir só na main.` : 'A rota não existe na versão publicada (renomeada, removida ou ainda não publicada).');
+      else if (s >= 500) partes.push('Erro dentro do servidor do Sra Luck: código ou algo de que ele depende (banco, integração).');
+    } else if (i.causaBase) { partes.push(i.causaBase); forca = i.causaForca || 'hipotese'; }
+    if (dep && !raiz) {
+      partes.push(`Começou ${dep.delta >= 0 ? `${dur(dep.delta)} depois` : 'junto'} do deploy de produção ${dep.ref} ("${dep.titulo}"): é o principal suspeito. Compare com o deploy anterior ou faça rollback em Engenharia.`);
+      base.push('proximidade no tempo com um deploy');
+    }
+    if (mig && !raiz && (s >= 500 || String(i.key).includes('diagnostico'))) {
+      partes.push(`A migration ${mig.titulo} entrou na main ${dur(mig.delta)} antes. Se ela ainda não foi aplicada no banco, o código pode estar procurando coluna ou tabela que não existe.`);
+      base.push('migration recente (a aplicação no banco não é verificável daqui)');
+    }
+    if (!partes.length) return { texto: 'As evidências atuais não apontam uma causa. Veja evidências e linha do tempo no detalhe.', forca: 'sem', base, perto };
+    return { texto: partes.join(' '), forca, base, perto };
+  }
+  const FORCA = { evidencia: ['baseada em evidência', 'ok'], hipotese: ['hipótese', 'warn'], sem: ['sem causa identificada', 'neutral'] };
+
   // ------------------------------------------------------------- incidentes
-  function incidentes() {
-    const itens = [], I = infra(), ch = V.changes?.ok ? V.changes.data : null;
-    if (V.ready && !V.ready.ok) itens.push({ sev: 'critical', titulo: 'API do Sra Luck não está pronta', contexto: `/api/ready respondeu HTTP ${V.ready.status || 'sem resposta'} agora`, impacto: 'Clientes e equipe podem não conseguir usar o App e o Admin.', acao: 'Abra Infraestrutura e confira Worker, banco e variáveis; veja se houve deploy recente.', href: 'infraestrutura.html' });
+  function incidentes(comps) {
+    const itens = [], I = infra(), ch = V.changes?.ok ? V.changes.data : null, fs = fontes();
+    const byId = Object.fromEntries((comps || componentes()).map((c) => [c.id, c]));
+    const temProblema = (id) => problemas().some((p) => p.id === id);
+    if (V.ready && !V.ready.ok && !temProblema('plataforma:ready')) itens.push({ key: 'ready', sev: 'critical', comp: 'api', http: V.ready.status || 0, titulo: 'API do Sra Luck não está pronta', contexto: `/api/ready respondeu HTTP ${V.ready.status || 'sem resposta'} agora`, impacto: 'Clientes e equipe podem não conseguir usar o App e o Admin.', passos: ['Abra Infraestrutura e confira Worker, banco e variáveis.', 'Veja em Engenharia se houve deploy recente; se sim, considere rollback.'], evid: [['/api/ready', `HTTP ${V.ready.status || '—'} · ${ms(V.ready.ms)}`]], href: 'infraestrutura.html' });
     for (const p of problemas()) {
       if (p.severidade === 'info') continue;
-      const ev = (p.evidencias || [])[0];
-      itens.push({ sev: p.severidade, titulo: p.titulo, contexto: [p.ocorrencias > 1 ? `${p.ocorrencias} ocorrências` : null, ev ? `${ev.label}: ${ev.valor}` : null].filter(Boolean).join(' · '), impacto: p.impacto || p.explicacao?.porQue || '', acao: p.explicacao?.comoResolver?.[0] || '', href: 'problemas.html', fix: (p.acoes || []).some((a) => a.tipo === 'seguro' || a.tipo === 'confirmar') });
+      const id = String(p.id), fonte = id.startsWith('funcao:') ? fs.find((x) => `funcao:${x.id}` === id) : id === 'plataforma:ready' ? fs.find((x) => x.id === 'ready') : null;
+      const http = fonte ? (fonte.status || 0) : p.pacote?.status_http != null ? Number(p.pacote.status_http) : null;
+      // Erros agrupados só olham as últimas 24 h: um "desde" colado no limite não é o início real.
+      const ancora = id.startsWith('bug:') && p.desde && Date.now() - Date.parse(p.desde) > 23 * H ? null : p.desde || null;
+      const operacional = ['operacional', 'dados', 'configuracao'].includes(p.tipo) && http == null;
+      itens.push({ key: id, sev: p.severidade, comp: compDoProblema(p), http, ancora, ultima: p.ultimaVez || p.incidente?.ultimaVez || null, reaberto: p.incidente?.status === 'reopened',
+        titulo: p.titulo, contexto: [p.ocorrencias > 1 ? `${p.ocorrencias} ocorrências` : null, ancora ? `desde ${quando(ancora)}` : null].filter(Boolean).join(' · '),
+        impacto: p.impacto || p.explicacao?.porQue || '', passos: p.explicacao?.comoResolver || [],
+        causaBase: operacional ? p.explicacao?.oQue || p.descricao : /^(bug|app:desempenho):/.test(id) ? p.explicacao?.porQue || null : null, causaForca: operacional ? 'evidencia' : 'hipotese',
+        evid: [p.descricao ? ['Detalhe', p.descricao] : null, ...(p.evidencias || []).map((e) => [e.label, e.valor])].filter(Boolean), href: 'problemas.html', fix: (p.acoes || []).some((a) => a.tipo === 'seguro' || a.tipo === 'confirmar') });
     }
     for (const i of I?.incidents || []) {
       if (!['open', 'investigating', 'reopened'].includes(i.status)) continue;
-      const src = i.metadata?.source, txt = INFRA_TXT[src] || ['Recurso de infraestrutura fora do normal.', 'Veja o detalhe em Infraestrutura.'];
-      itens.push({ sev: i.severity === 'critical' ? 'critical' : i.severity === 'high' ? 'high' : 'warning', titulo: i.title, contexto: `desde ${quando(i.first_seen_at)} · ${i.occurrence_count || 1} ocorrência(s) · última ${quando(i.last_seen_at)}`, impacto: txt[0], acao: txt[1], href: 'infraestrutura.html' });
+      const src = i.metadata?.source, key = String(i.fingerprint || '').split(':')[2] || '', txt = INFRA_TXT[src] || ['Recurso de infraestrutura fora do normal.', 'Veja o detalhe em Infraestrutura.'], sg = signal(src, key);
+      itens.push({ key: i.fingerprint || i.id, sev: i.severity === 'critical' ? 'critical' : i.severity === 'high' ? 'high' : 'warning', comp: COMP_DA_INFRA[src] || null, http: null, ancora: i.status === 'reopened' ? null : i.first_seen_at, ultima: i.last_seen_at, reaberto: i.status === 'reopened',
+        titulo: i.title, contexto: `desde ${quando(i.first_seen_at)} · ${i.occurrence_count || 1} leitura(s) acima do limite · última ${quando(i.last_seen_at)}`, impacto: txt[0], passos: [txt[1]], causaBase: CAUSA_INFRA[key] ? `Causas mais comuns: ${CAUSA_INFRA[key]}` : null,
+        evid: [sg ? [sg.label || key, `${sg.unit === '%' ? pct(sg.value) : sg.value} agora (alerta ${sg.warn ?? '—'}, crítico ${sg.crit ?? '—'})`] : null, ['Primeira leitura', DC.dateTimeFmt.format(new Date(i.first_seen_at))], ['Leituras acima do limite', String(i.occurrence_count || 1)]].filter(Boolean), href: 'infraestrutura.html' });
     }
-    if (ch?.ci?.status === 'completed' && ch.ci.conclusion === 'failure') itens.push({ sev: 'high', titulo: 'CI da main do Sra Luck falhou', contexto: `${ch.ci.name} · ${quando(ch.ci.updated_at || ch.ci.created_at)}`, impacto: 'O código mais recente não passou nos testes; um deploy dele pode quebrar algo.', acao: 'Abra Engenharia, veja o log e re-rode ou corrija antes de publicar.', href: 'engenharia.html' });
-    if (ch?.deploy?.producao?.state === 'ERROR') itens.push({ sev: 'high', titulo: 'Último deploy de produção falhou', contexto: quando(ch.deploy.producao.createdAt ? new Date(ch.deploy.producao.createdAt).toISOString() : null), impacto: 'A versão nova não entrou no ar; as clientes seguem na anterior.', acao: 'Abra Engenharia, veja o erro de build e faça redeploy.', href: 'engenharia.html' });
-    if (ch?.sincronia?.estado === 'producao_atras') itens.push({ sev: 'warning', titulo: `Produção ${ch.sincronia.commitsAtras} commit(s) atrás da main`, contexto: `produção ${String(ch.sincronia.producaoSha).slice(0, 7)} · main ${String(ch.sincronia.mainSha).slice(0, 7)}`, impacto: 'Correções já integradas na main ainda não chegaram às clientes.', acao: 'Em Engenharia, faça o redeploy/promoção do commit da main (confira o CI antes).', href: 'engenharia.html' });
-    return itens.sort((a, b) => SEV[a.sev][0] - SEV[b.sev][0]);
+    if (ch?.ci?.status === 'completed' && ch.ci.conclusion === 'failure') itens.push({ key: 'ci', sev: 'high', comp: null, http: null, ancora: ch.ci.created_at, titulo: 'CI da main do Sra Luck falhou', contexto: `${ch.ci.name} · ${quando(ch.ci.updated_at || ch.ci.created_at)}`, impacto: 'O código mais recente não passou nos testes; publicá-lo pode quebrar algo.', passos: ['Abra Engenharia e veja o log do job que falhou.', 'Corrija na main ou re-rode se a falha for de infraestrutura do GitHub.'], causaBase: `O workflow "${ch.ci.name}" falhou no commit ${(ch.ci.head_sha || '').slice(0, 7)}; a causa exata está no log do job.`, causaForca: 'evidencia', evid: [['Workflow', ch.ci.name], ['Commit', (ch.ci.head_sha || '').slice(0, 7) || '—']], href: 'engenharia.html' });
+    const prodDep = ch?.deploy?.producao, ultimoProd = (ch?.deploy?.recentes || []).find((d) => d.target === 'production');
+    if (ultimoProd?.state === 'ERROR') itens.push({ key: 'deploy', sev: 'high', comp: 'vercel', http: null, ancora: null, titulo: 'Último deploy de produção falhou', contexto: quando(new Date(ultimoProd.createdAt).toISOString()), impacto: 'A versão nova não entrou no ar; as clientes seguem na anterior.', passos: ['Abra Engenharia, veja o erro de build e faça redeploy depois de corrigir.'], causaBase: 'O build ou a verificação do deploy falhou; a mensagem exata está no log de build da Vercel.', causaForca: 'evidencia', evid: [['Commit', (ultimoProd.sha || '').slice(0, 7) || '—'], ['Mensagem', ultimoProd.message || '—']], href: 'engenharia.html' });
+    if (ch?.sincronia?.estado === 'producao_atras') {
+      const s = ch.sincronia, doMain = (ch.deploy?.recentes || []).find((d) => d.sha && d.sha === s.mainSha);
+      const causa = !doMain ? 'Nenhum dos 12 últimos deploys da Vercel é do commit atual da main: o deploy automático não rodou (desligado, fila ou limite diário de deploys do plano).' : doMain.state === 'ERROR' ? `O deploy do commit da main falhou (${doMain.target === 'production' ? 'produção' : 'preview'}): veja o log de build.` : doMain.target !== 'production' ? 'Existe deploy do commit da main, mas só como preview: falta promover para produção.' : `O deploy do commit da main está em ${String(doMain.state || '').toLowerCase()}.`;
+      itens.push({ key: 'sync', sev: 'warning', comp: 'vercel', http: null, ancora: null, titulo: `Produção ${s.commitsAtras} commit(s) atrás da main`, contexto: `produção ${String(s.producaoSha).slice(0, 7)} · main ${String(s.mainSha).slice(0, 7)}`, impacto: 'Correções já integradas na main ainda não chegaram às clientes.', passos: ['Em Engenharia, faça o redeploy/promoção do commit da main (confira o CI antes).'], causaBase: causa, causaForca: 'evidencia', evid: [['Produção', `${String(s.producaoSha).slice(0, 7)}${prodDep?.message ? ` · ${prodDep.message}` : ''}`], ['Main', `${String(s.mainSha).slice(0, 7)}${ch.main?.message ? ` · ${ch.main.message}` : ''}`], ['Deploy do commit da main', doMain ? `${doMain.state} · ${doMain.target}` : 'não encontrado']], href: 'engenharia.html' });
+    }
+    for (const i of itens) { i.diag = diagnosticar(i, byId); i.acao = i.passos[0] || ''; }
+    return itens.sort((a, b) => SEV[a.sev][0] - SEV[b.sev][0] || (b.diag.perto.length - a.diag.perto.length));
   }
+
 
   // ------------------------------------------------------------- render
   function renderHero(comps, incs) {
@@ -164,8 +276,12 @@
     const flowsBad = FLOWS.filter((f) => fontes().some((x) => f.areas.includes(x.area) && !x.ok && !x.naoConfigurado)).length;
     const tone = bad || incs.some((i) => i.sev === 'critical') ? 'bad' : warn || incs.length ? 'warn' : sem === comps.length ? 'neutral' : 'ok';
     DC.$('ovDot').className = `dc-ov-dot ${tone}`;
-    DC.$('ovTitle').textContent = tone === 'ok' ? 'Tudo funcionando' : tone === 'bad' ? 'Há falha afetando o sistema' : tone === 'warn' ? `${incs.length} item(ns) pedem atenção` : 'Ainda sem dados suficientes';
-    DC.$('ovSub').textContent = tone === 'ok' ? 'Nenhum componente com falha e nenhum alerta aberto.' : tone === 'neutral' ? 'Configure o conector e as integrações de monitoramento para o painel ter evidência.' : `${bad ? `${bad} componente(s) com falha. ` : ''}${crit ? `${crit} alerta(s) importante(s). ` : ''}Veja os detalhes abaixo.`;
+    DC.$('ovTitle').textContent = tone === 'ok' ? 'Tudo funcionando' : tone === 'bad' ? 'Há falha afetando o sistema' : tone === 'warn' ? (incs.length ? `${incs.length} item(ns) pedem atenção` : `${warn} componente(s) em atenção`) : 'Ainda sem dados suficientes';
+    DC.$('ovSub').textContent = tone === 'ok' ? 'Nenhum componente com falha e nenhum alerta aberto.' : tone === 'neutral' ? 'Configure o conector e as integrações de monitoramento para o painel ter evidência.' : `${bad ? `${bad} componente(s) com falha. ` : ''}${crit ? `${crit} alerta(s) importante(s). ` : ''}${incs.length - crit > 0 ? `${incs.length - crit} em observação.` : ''}`.trim() || 'Nenhum alerta aberto ainda; veja os componentes marcados abaixo.';
+    // A primeira coisa a fazer: o alerta mais grave (e, entre iguais, o que tem mudança suspeita por perto).
+    const top = incs[0], next = DC.$('ovNext');
+    next.hidden = !top;
+    if (top) next.innerHTML = `<span class="dc-ov-next-label">Próxima ação</span><span class="dc-ov-next-text"><strong>${esc(top.titulo)}</strong>${esc(top.acao || top.diag.texto)}</span><button class="dc-btn primary" data-inc="${esc(top.key)}"><i data-lucide="search"></i>Investigar</button>`;
     const ch = V.changes?.ok ? V.changes.data : null;
     const sinc = ch?.sincronia?.estado === 'sincronizado' ? ['Produção = main', 'ok'] : ch?.sincronia?.estado === 'producao_atras' ? [`Produção ${ch.sincronia.commitsAtras} atrás`, 'warn'] : ['Sincronia desconhecida', 'neutral'];
     DC.$('ovCounts').innerHTML = [DC.chip(`${incs.length} alerta(s)`, incs.length ? (crit ? 'bad' : 'warn') : 'ok'), DC.chip(prob() ? `${flowsBad} fluxo(s) com falha` : 'Fluxos não testados', prob() ? (flowsBad ? 'bad' : 'ok') : 'neutral'), DC.chip(sinc[0], sinc[1])].join('');
@@ -174,16 +290,13 @@
   }
 
   const marca = (c) => (c.logo ? `<img class="dc-ov-logo" src="assets/logos/${c.logo}.svg" alt="">` : `<span class="dc-ov-icon"><i data-lucide="${c.icone}"></i></span>`);
+  const ORDEM_TOM = { bad: 0, warn: 1, neutral: 2, ok: 3 };
   function renderComponentes(comps) {
-    DC.$('components').innerHTML = comps.map((c) => `<button class="dc-ov-comp" data-comp="${c.id}">${marca(c)}<span class="dc-ov-comp-main"><strong>${esc(c.nome)}</strong><small>${esc(c.frase)}</small></span><span class="dc-ov-comp-metric">${esc(c.metrica || '')}</span>${DC.chip(TONE_LABEL[c.tone], c.tone === 'neutral' ? 'neutral' : c.tone)}</button>`).join('');
-  }
-
-  function renderIncidentes(incs) {
-    const el = DC.$('incidents');
-    if (!prob() && !infra()) { el.innerHTML = '<div class="dc-empty">Ainda não há evidência suficiente: problemas e infraestrutura não puderam ser lidos.</div>'; return; }
-    if (!incs.length) { el.innerHTML = '<div class="dc-ov-allclear"><i data-lucide="shield-check"></i><div><strong>Nenhum alerta aberto</strong><p>Nada pede ação agora. Os fluxos e a infraestrutura continuam sendo vigiados.</p></div></div>'; return; }
-    const shown = incs.slice(0, 7);
-    el.innerHTML = shown.map((i) => `<article class="dc-ov-inc ${SEV[i.sev][2]}"><header>${DC.chip(SEV[i.sev][1], SEV[i.sev][2])}<strong>${esc(i.titulo)}</strong></header>${i.contexto ? `<p class="ctx">${esc(i.contexto)}</p>` : ''}${i.impacto ? `<p><b>Impacto:</b> ${esc(i.impacto)}</p>` : ''}${i.acao ? `<p><b>O que fazer:</b> ${esc(i.acao)}</p>` : ''}<footer><a class="dc-btn" href="${i.href}">${i.fix ? 'Corrigir na Central' : 'Abrir'}</a></footer></article>`).join('') + (incs.length > shown.length ? `<a class="dc-ov-more" href="problemas.html">+ ${incs.length - shown.length} outro(s) na Central de Problemas</a>` : '');
+    const byId = Object.fromEntries(comps.map((c) => [c.id, c]));
+    DC.$('components').innerHTML = comps.slice().sort((a, b) => ORDEM_TOM[a.tone] - ORDEM_TOM[b.tone]).map((c) => {
+      const raiz = c.tone === 'bad' || c.tone === 'warn' ? (DEPS[c.id] || []).map((id) => byId[id]).find((d) => d?.tone === 'bad') : null;
+      return `<button class="dc-ov-comp ${c.tone}" data-comp="${c.id}">${marca(c)}<span class="dc-ov-comp-main"><strong>${esc(c.nome)}</strong><small>${esc(raiz ? `Efeito provável de ${raiz.nome}. ${c.frase}` : c.frase)}</small></span><span class="dc-ov-comp-metric">${esc(c.metrica || '')}</span>${DC.chip(TONE_LABEL[c.tone], c.tone === 'neutral' ? 'neutral' : c.tone)}</button>`;
+    }).join('');
   }
 
   function renderFluxos() {
@@ -228,31 +341,143 @@
     const pts = (k) => (data[k] || []).map((p) => ({ t: p.observed_at, v: p.metric_value }));
     DCChart.line(card('Latência dos fluxos', 'Tempo de resposta real de cada fluxo testado (ms)'), { series: LAT.map(([k, n], i) => ({ name: n, color: PAL[i], points: pts(k) })), unit: ' ms', from, to, legend: true, label: 'Latência dos fluxos em milissegundos', empty: r.ok ? 'Sem leituras de latência neste período. Elas passam a ser gravadas a cada varredura.' : (r.error || 'Histórico indisponível.') });
     // Erros por janela, a partir dos eventos registrados (não inventa zero antes do primeiro evento conhecido).
-    const ev = eventos(), limite = 250, cheio = ev.length >= limite, desde = cheio ? Math.min(...ev.map((e) => new Date(e.criado_em).getTime())) : from;
-    const passo = h <= 24 ? 3600000 : h <= 168 ? 6 * 3600000 : 86400000, ini = Math.max(from, Math.floor(desde / passo) * passo);
+    const ev = eventos(), cheio = ev.length >= LIMITE_EVENTOS, desde = inicioEventos() ?? from;
+    const passo = h <= 24 ? 3600000 : h <= 168 ? 6 * 3600000 : 86400000;
     const areas = ['App da cliente', 'Admin', 'API e rotinas'];
-    const buckets = areas.map(() => new Map());
-    for (let t = ini; t <= to; t += passo) buckets.forEach((b) => b.set(t, 0));
-    for (const e of ev) { const t = new Date(e.criado_em).getTime(); if (t < ini) continue; const k = ini + Math.floor((t - ini) / passo) * passo; const b = buckets[areas.indexOf(areaDoEvento(e))]; b.set(k, (b.get(k) || 0) + 1); }
-    DCChart.line(card('Erros registrados', `Erros do App, do Admin e da API por ${passo === 3600000 ? 'hora' : passo === 86400000 ? 'dia' : '6 horas'}`), { series: V.errors?.ok ? areas.map((n, i) => ({ name: n, color: PAL[i], points: [...buckets[i]].map(([t, v]) => ({ t, v })) })) : [], unit: '', decimals: 0, from, to, legend: true, label: 'Erros registrados por período', empty: V.errors?.ok ? 'Sem eventos de erro.' : (V.errors?.error || 'Registro de erros indisponível.') });
+    DCChart.line(card('Erros registrados', `Erros do App, do Admin e da API por ${passo === 3600000 ? 'hora' : passo === 86400000 ? 'dia' : '6 horas'}`), { series: V.errors?.ok ? areas.map((n, i) => ({ name: n, color: PAL[i], points: serieErros(n, from, to, passo) })) : [], unit: '', decimals: 0, from, to, legend: true, label: 'Erros registrados por período', empty: V.errors?.ok ? 'Sem eventos de erro.' : (V.errors?.error || 'Registro de erros indisponível.') });
     DCChart.line(card('Recursos', 'Uso de CPU, RAM e disco do banco e memória do Worker (%)'), { series: REC.map(([k, n], i) => ({ name: n, color: PAL[i], points: pts(k) })), unit: '%', yMax: 100, from, to, legend: true, references: [{ v: 80, label: 'alerta', tone: 'warn' }, { v: 90, label: 'crítico', tone: 'bad' }], label: 'Uso de recursos em porcentagem', empty: r.ok ? 'Sem leituras de recursos neste período.' : (r.error || 'Histórico indisponível.') });
     // Honestidade sobre densidade e cobertura.
     const n = pts('probe:ready').length || pts('supabase:memory_usage_percent').length, avisos = [];
     if (r.ok && n < Math.min(6, h / 4)) avisos.push(`Só ${n} leitura(s) neste período: hoje as coletas vêm do cron diário e das varreduras manuais. Ative a varredura horária (GitHub Actions, ver SCHEDULER.md) para curvas mais densas.`);
-    if (cheio) avisos.push(`O gráfico de erros usa os últimos ${limite} eventos (desde ${DC.dateTimeFmt.format(new Date(desde))}); antes disso não há dado carregado.`);
+    if (cheio) avisos.push(`O gráfico de erros usa os últimos ${LIMITE_EVENTOS} eventos (desde ${DC.dateTimeFmt.format(new Date(desde))}); antes disso não há dado carregado.`);
     note.hidden = !avisos.length; note.textContent = avisos.join(' ');
   }
 
   // ------------------------------------------------------------- drawers
-  function drawerComponente(id) {
-    const c = componentes().find((x) => x.id === id); if (!c) return;
-    const rel = c.relacionados || [];
-    DC.openDrawer(c.nome, `<div class="dc-ov-drawer-head">${marca(c)}${DC.chip(TONE_LABEL[c.tone], c.tone === 'neutral' ? 'neutral' : c.tone)}</div>
-      <h3 class="dc-nc-h">O que está acontecendo</h3><p class="dc-ov-p">${esc(c.frase)}</p>
-      ${c.medidas?.length ? `<h3 class="dc-nc-h">Medições agora</h3><div class="dc-list">${c.medidas.map(([k, v]) => `<div class="dc-row" style="grid-template-columns:1fr auto"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : ''}
-      ${rel.length ? `<h3 class="dc-nc-h">Problemas relacionados</h3>${rel.slice(0, 6).map((p) => `<div class="dc-ov-inc ${SEV[p.severidade]?.[2] || 'info'}"><header>${DC.chip(SEV[p.severidade]?.[1] || p.severidade, SEV[p.severidade]?.[2] || 'info')}<strong>${esc(p.titulo)}</strong></header>${p.explicacao?.oQue ? `<p>${esc(p.explicacao.oQue)}</p>` : ''}${p.explicacao?.comoResolver?.length ? `<p><b>Como resolver:</b> ${esc(p.explicacao.comoResolver.join(' '))}</p>` : ''}</div>`).join('')}` : ''}
-      <p class="dc-muted" style="margin-top:10px;font-size:9.5px">Verificado ${esc(new Date().toLocaleTimeString('pt-BR'))}.</p>`, { footer: `<a class="dc-btn primary" href="${c.href}">Abrir ${esc(c.pagina)}</a>` });
+  // ------------------------------------------------------------- render de incidentes
+  const incHtml = (i) => `<article class="dc-ov-inc ${SEV[i.sev][2]}"><header>${DC.chip(SEV[i.sev][1], SEV[i.sev][2])}<strong>${esc(i.titulo)}</strong>${i.reaberto ? DC.chip('Voltou', 'purple') : ''}</header>
+    ${i.contexto ? `<p class="ctx">${esc(i.contexto)}</p>` : ''}
+    <p><b>Causa provável:</b> ${esc(i.diag.texto)} <span class="dc-ov-forca ${FORCA[i.diag.forca][1]}">${FORCA[i.diag.forca][0]}</span></p>
+    ${i.impacto ? `<p><b>Impacto:</b> ${esc(i.impacto)}</p>` : ''}
+    ${i.acao ? `<p><b>Próxima ação:</b> ${esc(i.acao)}</p>` : ''}
+    ${i.diag.perto.length ? `<div class="dc-ov-links">${i.diag.perto.slice(0, 3).map(chipMudanca).join('')}</div>` : ''}
+    <footer><button class="dc-btn" data-inc="${esc(i.key)}"><i data-lucide="search"></i>Investigar</button><a class="dc-btn" href="${i.href}">${i.fix ? 'Corrigir na Central' : 'Abrir página'}</a></footer></article>`;
+  function renderIncidentes(incs) {
+    const el = DC.$('incidents');
+    if (!prob() && !infra()) { el.innerHTML = '<div class="dc-empty">Ainda não há evidência suficiente: problemas e infraestrutura não puderam ser lidos.</div>'; return; }
+    if (!incs.length) { el.innerHTML = '<div class="dc-ov-allclear"><i data-lucide="shield-check"></i><div><strong>Nenhum alerta aberto</strong><p>Nada pede ação agora. Os fluxos e a infraestrutura continuam sendo vigiados.</p></div></div>'; return; }
+    // Só o que exige ação fica aberto; o resto vai para "Em observação", recolhido.
+    const agir = incs.filter((i) => i.sev === 'critical' || i.sev === 'high'), observar = incs.filter((i) => !agir.includes(i));
+    const topo = agir.slice(0, 5);
+    el.innerHTML = (topo.length ? topo.map(incHtml).join('') : '<div class="dc-ov-allclear"><i data-lucide="shield-check"></i><div><strong>Nada crítico agora</strong><p>Só itens em observação, abaixo. Nenhum pede ação imediata.</p></div></div>')
+      + (agir.length > topo.length ? `<a class="dc-ov-more" href="problemas.html">+ ${agir.length - topo.length} outro(s) importante(s) na Central de Problemas</a>` : '')
+      + (observar.length ? `<details class="dc-ov-watch"><summary><span>Em observação</span>${DC.chip(String(observar.length), 'warn')}<small>Não exigem ação agora; acompanhe se crescerem.</small></summary>${observar.map((i) => `<button class="dc-ov-watch-row" data-inc="${esc(i.key)}"><span class="dc-fn-dot warn"></span><span class="dc-ov-comp-main"><strong>${esc(i.titulo)}</strong><small>${esc(i.impacto || i.contexto || '')}</small></span>${i.diag.perto.length ? DC.chip('mudança próxima', 'info') : ''}</button>`).join('')}</details>` : '');
   }
+
+  // ------------------------------------------------------------- drawer de incidente
+  function linhaDoTempo(i) {
+    const ev = [];
+    if (i.ancora) ev.push({ t: Date.parse(i.ancora), txt: 'Início detectado', tipo: 'inicio' });
+    if (i.ultima) ev.push({ t: Date.parse(i.ultima), txt: 'Última ocorrência', tipo: 'ultima' });
+    const t0 = Date.parse(i.ancora || i.ultima || '') || Date.now();
+    for (const m of mudancas()) if (m.t >= t0 - 24 * H && m.t <= Date.now()) ev.push({ t: m.t, txt: m.tipo === 'deploy' ? `Deploy de produção ${m.ref}${m.estado && m.estado !== 'READY' ? ` (${m.estado})` : ''} · ${m.titulo}` : `Migration ${m.titulo} entrou na main`, tipo: m.tipo, perto: i.diag.perto.some((x) => x.t === m.t && x.tipo === m.tipo) });
+    return ev.filter((e) => Number.isFinite(e.t)).sort((a, b) => b.t - a.t);
+  }
+  function resumoTexto(i) {
+    return [`[${SEV[i.sev][1]}] ${i.titulo}`, i.contexto, `Causa provável (${FORCA[i.diag.forca][0]}): ${i.diag.texto}`, i.impacto ? `Impacto: ${i.impacto}` : '', i.passos.length ? `O que fazer:\n${i.passos.map((p, n) => `${n + 1}. ${p}`).join('\n')}` : '',
+      i.evid.length ? `Evidências:\n${i.evid.map(([k, v]) => `- ${k}: ${v}`).join('\n')}` : '', i.diag.perto.length ? `Mudanças próximas:\n${i.diag.perto.map((m) => `- ${m.tipo} ${m.tipo === 'deploy' ? m.ref : m.titulo} (${quandoRel(m)})`).join('\n')}` : '', `Gerado pelo Dev Console em ${new Date().toLocaleString('pt-BR')}`].filter(Boolean).join('\n\n');
+  }
+  async function copiar(texto) {
+    try { await navigator.clipboard.writeText(texto); DC.toast('Resumo copiado.'); } catch { DC.toast('Não foi possível copiar neste navegador.', true); }
+  }
+  function drawerIncidente(key) {
+    const comps = componentes(), i = incidentes(comps).find((x) => x.key === key); if (!i) return;
+    const comp = comps.find((c) => c.id === i.comp), tl = linhaDoTempo(i);
+    const ov = DC.openDrawer(i.titulo, `<div class="dc-ov-drawer-head">${DC.chip(SEV[i.sev][1], SEV[i.sev][2])}${i.reaberto ? DC.chip('Voltou depois de resolvido', 'purple') : ''}${comp ? `<button class="dc-btn" data-open-comp="${comp.id}">${esc(comp.nome)} · ${esc(TONE_LABEL[comp.tone])}</button>` : ''}</div>
+      ${i.contexto ? `<p class="dc-ov-p dc-muted">${esc(i.contexto)}</p>` : ''}
+      <h3 class="dc-nc-h">Causa provável <span class="dc-ov-forca ${FORCA[i.diag.forca][1]}">${FORCA[i.diag.forca][0]}</span></h3><p class="dc-ov-p">${esc(i.diag.texto)}</p>
+      ${i.diag.base.length ? `<p class="dc-ov-p dc-muted">Com base em: ${esc(i.diag.base.join('; '))}.</p>` : ''}
+      ${i.impacto ? `<h3 class="dc-nc-h">Impacto</h3><p class="dc-ov-p">${esc(i.impacto)}</p>` : ''}
+      ${i.passos.length ? `<h3 class="dc-nc-h">O que fazer, em ordem</h3><ol class="dc-ov-steps">${i.passos.map((p) => `<li>${esc(p)}</li>`).join('')}</ol>` : ''}
+      ${i.evid.length ? `<h3 class="dc-nc-h">Evidências</h3><div class="dc-list">${i.evid.map(([k, v]) => `<div class="dc-row" style="grid-template-columns:minmax(90px,.4fr) 1fr"><span>${esc(k)}</span><b class="dc-ov-evid">${esc(v)}</b></div>`).join('')}</div>` : ''}
+      <h3 class="dc-nc-h">Linha do tempo</h3>${tl.length ? `<ol class="dc-ov-tl">${tl.map((e) => `<li class="${e.tipo}${e.perto ? ' perto' : ''}"><time>${esc(DC.dateTimeFmt.format(new Date(e.t)))}</time><span>${esc(e.txt)}</span>${e.perto ? DC.chip('suspeita', 'warn') : ''}</li>`).join('')}</ol>` : `<div class="dc-empty">${V.changes?.ok ? 'Sem início registrado e sem mudanças nas 24 h anteriores.' : 'Não foi possível ler deploys e migrations agora.'}</div>`}
+      ${!i.ancora ? '<p class="dc-ov-p dc-muted">O início deste problema não está registrado, então não dá para cruzar com mudanças com segurança.</p>' : ''}`,
+      { footer: `<button class="dc-btn" data-copy><i data-lucide="copy"></i>Copiar resumo</button><a class="dc-btn primary" href="${i.href}">${i.fix ? 'Corrigir na Central' : 'Abrir página'}</a>` });
+    ov.querySelector('[data-copy]').onclick = () => copiar(resumoTexto(i));
+    ov.querySelector('[data-open-comp]')?.addEventListener('click', (e) => drawerComponente(e.currentTarget.dataset.openComp));
+  }
+
+  // ------------------------------------------------------------- drawer de componente
+  // Séries gravadas a cada varredura que descrevem cada componente (mesma fonte dos gráficos da página).
+  const COMP_SERIES = {
+    app: { ms: [['probe:app', 'Monitoramento do app']], erros: 'App da cliente' },
+    admin: { ms: [['probe:visaoGeral', 'Visão geral'], ['probe:v46', 'Jornada V46'], ['probe:validacoes', 'Validações'], ['probe:configuracoes', 'Configurações']], erros: 'Admin' },
+    api: { ms: [['probe:ready', 'Prontidão'], ['probe:erros', 'Registro de erros']], erros: 'API e rotinas' },
+    supabase: { ms: [['probe:diagnostico', 'Diagnóstico do banco']], pct: [['supabase:cpu_usage_percent', 'CPU'], ['supabase:memory_usage_percent', 'RAM'], ['supabase:disk_usage_percent', 'Disco']] },
+    storage: { ms: [['probe:storage', 'Teste do Storage']] },
+    cloudflare: { pct: [['cloudflare:worker_memory_p99_percent', 'Memória P99'], ['cloudflare:worker_error_rate_percent', 'Taxa de erro']] },
+  };
+  const FONTES_DO_COMP = { app: (f) => f.area === 'app', admin: (f) => ADMIN_AREAS.includes(f.area), api: (f) => f.id === 'ready' || f.id === 'erros', supabase: (f) => f.id === 'diagnostico', storage: (f) => f.id === 'storage' };
+  const MUDA_COMP = { app: ['deploy'], admin: ['deploy'], api: ['deploy', 'migration'], supabase: ['migration'], vercel: ['deploy'] };
+
+  function causaDoComponente(c, byId, incs) {
+    if (c.tone === 'ok' || c.tone === 'neutral') return null;
+    const raiz = (DEPS[c.id] || []).map((id) => byId[id]).find((d) => d?.tone === 'bad');
+    if (raiz) return { texto: `Efeito provável de ${raiz.nome}, que está com falha. Resolva ${raiz.nome} primeiro.`, forca: 'evidencia', raiz };
+    const top = incs.find((i) => i.comp === c.id);
+    return top ? { texto: top.diag.texto, forca: top.diag.forca, inc: top } : null;
+  }
+
+  async function historicoComponente(c, box) {
+    const cfg = COMP_SERIES[c.id];
+    if (!cfg) {
+      const deps = (V.changes?.ok ? V.changes.data.deploy?.recentes || [] : []).filter((d) => d.target === 'production');
+      box.innerHTML = deps.length ? `<div class="dc-ov-deploys">${deps.map((d) => `<span class="dc-ov-deploy ${d.state === 'READY' ? 'ok' : d.state === 'ERROR' ? 'bad' : 'warn'}" title="${esc(`${d.state} · ${(d.sha || '').slice(0, 7)} · ${d.message || ''} · ${DC.dateTimeFmt.format(new Date(d.createdAt))}`)}"></span>`).reverse().join('')}</div><p class="dc-ov-p dc-muted">Últimos ${deps.length} deploys de produção, do mais antigo ao mais recente (passe o mouse para ver cada um).</p>` : `<div class="dc-empty">${V.changes?.ok ? 'Sem deploys de produção recentes.' : 'Não foi possível ler os deploys.'}</div>`;
+      return;
+    }
+    const to = Date.now(), from = to - 24 * H, keys = [...(cfg.ms || []), ...(cfg.pct || [])].map((x) => x[0]);
+    const r = keys.length ? await DC.api(`/api/infra-history?series=${encodeURIComponent(keys.join(','))}&hours=24`) : { ok: true, data: { series: {} } };
+    if (!box.isConnected) return;
+    const data = r.ok ? r.data.series || {} : {}, pts = (k) => (data[k] || []).map((p) => ({ t: p.observed_at, v: p.metric_value }));
+    const add = (titulo) => { const d = document.createElement('div'); d.className = 'dc-ov-chart'; d.innerHTML = `<header><strong>${esc(titulo)}</strong></header><div></div>`; box.appendChild(d); return d.lastElementChild; };
+    box.innerHTML = '';
+    if (cfg.ms) DCChart.line(add('Tempo de resposta (24 h)'), { series: cfg.ms.map(([k, n], i) => ({ name: n, color: PAL[i], points: pts(k) })), unit: ' ms', from, to, legend: cfg.ms.length > 1, label: `Tempo de resposta de ${c.nome}`, empty: r.ok ? 'Sem leituras nas últimas 24 h.' : (r.error || 'Histórico indisponível.') });
+    if (cfg.pct) DCChart.line(add('Uso de recursos (24 h)'), { series: cfg.pct.map(([k, n], i) => ({ name: n, color: PAL[i], points: pts(k) })), unit: '%', yMax: 100, from, to, legend: true, references: [{ v: 80, label: 'alerta', tone: 'warn' }, { v: 90, label: 'crítico', tone: 'bad' }], label: `Recursos de ${c.nome}`, empty: r.ok ? 'Sem leituras nas últimas 24 h.' : (r.error || 'Histórico indisponível.') });
+    if (cfg.erros) { const s = serieErros(cfg.erros, from, to, H); DCChart.line(add('Erros por hora (24 h)'), { series: V.errors?.ok ? [{ name: cfg.erros, color: PAL[1], points: s }] : [], unit: '', decimals: 0, from, to, label: `Erros de ${c.nome} por hora`, empty: V.errors?.ok ? 'Sem eventos de erro.' : (V.errors?.error || 'Registro de erros indisponível.') }); }
+  }
+
+  function resumoComponente(c, causa, rel, fsC) {
+    return [`${c.nome}: ${TONE_LABEL[c.tone]}`, c.frase, causa ? `Causa provável (${FORCA[causa.forca][0]}): ${causa.texto}` : '', c.medidas?.length ? `Medições:\n${c.medidas.map(([k, v]) => `- ${k}: ${v}`).join('\n')}` : '',
+      fsC.length ? `Testes:\n${fsC.map((f) => `- ${f.label} ${f.path}: ${f.naoConfigurado ? 'sem conector' : f.ok ? `OK ${ms(f.ms)}` : `HTTP ${f.status || 'sem resposta'}`}`).join('\n')}` : '', rel.length ? `Problemas:\n${rel.map((p) => `- [${SEV[p.severidade]?.[1] || p.severidade}] ${p.titulo}`).join('\n')}` : '', `Gerado pelo Dev Console em ${new Date().toLocaleString('pt-BR')}`].filter(Boolean).join('\n\n');
+  }
+
+  function drawerComponente(id) {
+    const comps = componentes(), c = comps.find((x) => x.id === id); if (!c) return;
+    const byId = Object.fromEntries(comps.map((x) => [x.id, x])), incs = incidentes(comps), causa = causaDoComponente(c, byId, incs);
+    const rel = c.relacionados || [], outros = rel.filter((p) => p.severidade === 'info'), fsC = FONTES_DO_COMP[c.id] ? fontes().filter(FONTES_DO_COMP[c.id]) : [], incC = incs.filter((i) => i.comp === c.id);
+    const depRow = (d, papel) => d ? `<button class="dc-ov-dep" data-open-comp="${d.id}"><span class="dc-fn-dot ${d.tone === 'neutral' ? 'neutral' : d.tone}"></span><span class="dc-ov-comp-main"><strong>${esc(d.nome)}</strong><small>${esc(papel)} · ${esc(d.frase)}</small></span>${DC.chip(TONE_LABEL[d.tone], d.tone === 'neutral' ? 'neutral' : d.tone)}</button>` : '';
+    const deps = [...(DEPS[c.id] || []).map((x) => depRow(byId[x], 'depende de')), HOSPEDAGEM[c.id] ? depRow(byId[HOSPEDAGEM[c.id]], 'publicado por') : '', ...(RELACIONADO[c.id] || []).map((x) => depRow(byId[x], 'relacionado')), ...dependentes(c.id).map((x) => depRow(byId[x], 'é usado por'))].join('');
+    // Medições que repetem um teste da tabela abaixo não aparecem duas vezes.
+    const medidas = (c.medidas || []).filter((m) => !(fsC.length && m[2] === 'teste'));
+    const tipos = MUDA_COMP[c.id] || [], muda = mudancas().filter((m) => tipos.includes(m.tipo) && Date.now() - m.t <= 72 * H);
+    const ov = DC.openDrawer(c.nome, `<div class="dc-ov-drawer-head">${marca(c)}${DC.chip(TONE_LABEL[c.tone], c.tone === 'neutral' ? 'neutral' : c.tone)}${causa?.raiz ? DC.chip(`efeito de ${causa.raiz.nome}`, 'purple') : ''}</div>
+      <h3 class="dc-nc-h">O que está acontecendo</h3><p class="dc-ov-p">${esc(c.frase)}</p>
+      ${causa ? `<h3 class="dc-nc-h">Causa provável <span class="dc-ov-forca ${FORCA[causa.forca][1]}">${FORCA[causa.forca][0]}</span></h3><p class="dc-ov-p">${esc(causa.texto)}</p>${causa.inc?.acao ? `<p class="dc-ov-p"><b>Próxima ação:</b> ${esc(causa.inc.acao)}</p>` : ''}` : ''}
+      ${incC.length ? `<h3 class="dc-nc-h">Alertas deste componente</h3><div class="dc-ov-watch-list">${incC.map((i) => `<button class="dc-ov-watch-row" data-inc="${esc(i.key)}"><span class="dc-fn-dot ${SEV[i.sev][2] === 'bad' ? 'bad' : 'warn'}"></span><span class="dc-ov-comp-main"><strong>${esc(i.titulo)}</strong><small>${esc(i.impacto || i.contexto || '')}</small></span>${DC.chip(SEV[i.sev][1], SEV[i.sev][2])}</button>`).join('')}</div>` : ''}
+      <h3 class="dc-nc-h">Histórico</h3><div class="dc-ov-drawer-charts" id="compHist"><div class="dc-empty">Carregando histórico…</div></div>
+      ${deps ? `<h3 class="dc-nc-h">Dependências</h3><div class="dc-ov-deps">${deps}</div>` : ''}
+      <h3 class="dc-nc-h">Evidências agora</h3>
+      ${medidas.length ? `<div class="dc-list">${medidas.map(([k, v]) => `<div class="dc-row" style="grid-template-columns:1fr auto"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : fsC.length ? '' : '<div class="dc-empty">Sem medições para este componente.</div>'}
+      ${fsC.length ? `<div class="dc-table-wrap" style="margin-top:8px"><table class="dc-compact-table"><thead><tr><th>Teste</th><th>Endpoint</th><th>Resultado</th><th>Tempo</th></tr></thead><tbody>${fsC.map((x) => `<tr><td>${esc(x.label)}</td><td class="dc-mono">${esc(x.path)}</td><td>${x.naoConfigurado ? DC.chip('Sem conector', 'neutral') : x.ok ? DC.chip('OK', 'ok') : DC.chip(`HTTP ${x.status || '—'}`, 'bad')}</td><td>${x.naoConfigurado ? '—' : ms(x.ms)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${tipos.length ? `<h3 class="dc-nc-h">Mudanças nas últimas 72 h</h3>${muda.length ? `<div class="dc-ov-links">${muda.map((m) => chipMudanca({ ...m, delta: null })).join('')}</div>` : `<div class="dc-empty">${V.changes?.ok ? 'Nenhum deploy ou migration nas últimas 72 h.' : 'Não foi possível ler deploys e migrations.'}</div>`}` : ''}
+      ${outros.length ? `<h3 class="dc-nc-h">Outros pontos (informativos)</h3><div class="dc-ov-watch-list">${outros.slice(0, 8).map((p) => `<button class="dc-ov-watch-row" ${p.severidade === 'info' ? '' : `data-inc="${esc(p.id)}"`}><span class="dc-fn-dot ${SEV[p.severidade]?.[2] === 'bad' ? 'bad' : SEV[p.severidade]?.[2] === 'warn' ? 'warn' : 'neutral'}"></span><span class="dc-ov-comp-main"><strong>${esc(p.titulo)}</strong><small>${esc(p.explicacao?.oQue || p.descricao || '')}</small></span></button>`).join('')}</div>` : ''}
+      <p class="dc-muted" style="margin-top:10px;font-size:9.5px">Verificado ${esc(new Date().toLocaleTimeString('pt-BR'))}.</p>`,
+      { footer: `<button class="dc-btn" data-copy><i data-lucide="copy"></i>Copiar resumo</button><a class="dc-btn primary" href="${c.href}">Abrir ${esc(c.pagina)}</a>` });
+    ov.querySelector('[data-copy]').onclick = () => copiar(resumoComponente(c, causa, rel, fsC));
+    ov.addEventListener('click', (e) => { const a = e.target.closest('[data-open-comp]'); if (a) return drawerComponente(a.dataset.openComp); const b = e.target.closest('[data-inc]'); if (b) drawerIncidente(b.dataset.inc); });
+    historicoComponente(c, ov.querySelector('#compHist'));
+  }
+
 
   function drawerFluxo(id) {
     const f = FLOWS.find((x) => x.id === id); if (!f) return;
@@ -265,7 +490,7 @@
 
   // ------------------------------------------------------------- ciclo
   function renderTudo() {
-    const comps = componentes(), incs = incidentes();
+    const comps = componentes(), incs = incidentes(comps);
     renderHero(comps, incs); renderComponentes(comps); renderIncidentes(incs); renderFluxos(); renderMudancas();
     DC.$('lastRefresh').textContent = `Atualizado ${new Date().toLocaleTimeString('pt-BR')}`;
     window.lucide?.createIcons();
@@ -288,6 +513,9 @@
     DC.$('refreshBtn').onclick = () => atualizar(true);
     DC.$('scanBtn').onclick = (e) => varredura(e.currentTarget);
     DC.$('components').addEventListener('click', (e) => { const b = e.target.closest('[data-comp]'); if (b) drawerComponente(b.dataset.comp); });
+    const investigar = (e) => { const b = e.target.closest('[data-inc]'); if (b) drawerIncidente(b.dataset.inc); };
+    DC.$('incidents').addEventListener('click', investigar);
+    DC.$('ovNext').addEventListener('click', investigar);
     DC.$('flows').addEventListener('click', (e) => { const b = e.target.closest('[data-flow]'); if (b) drawerFluxo(b.dataset.flow); });
     DC.$('histRange').addEventListener('click', (e) => { const b = e.target.closest('[data-h]'); if (!b) return; S.hours = Number(b.dataset.h); DC.$('histRange').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b)); renderHistorico(); });
     atualizar(true);

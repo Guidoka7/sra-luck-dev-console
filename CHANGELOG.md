@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0 — Diagnóstico na Visão Geral
+
+- cada alerta traz causa provável (marcada como "baseada em evidência", "hipótese" ou "sem causa identificada"), impacto e próxima ação;
+- a causa usa só dados reais: código HTTP do teste, componente de que ele depende estar com falha, deploy de produção ou migration entre 6 h antes e 15 min depois do início, e o estado do deploy do commit da main;
+- "Próxima ação" no topo, com o alerta mais grave; alertas de nível atenção ficam recolhidos em "Em observação";
+- drawer "Investigar" por alerta: causa e em que se baseia, passos em ordem, evidências, linha do tempo com as mudanças suspeitas e "Copiar resumo";
+- drawer de componente com histórico de 24 h, dependências (App e Admin → API → Supabase/Storage, publicados pela Vercel), evidências sem repetição, mudanças das últimas 72 h e alertas do componente;
+- componentes ordenados por gravidade e marcados como "efeito provável" quando a falha vem de uma dependência;
+- `/api/problemas` informa desde quando cada problema existe (incidente aberto);
+- `github-status?resource=changes` devolve os 12 deploys lidos (antes 8) para a correlação.
+
 ## 0.6.0 — Visão Geral operacional
 
 - Visão Geral refeita sobre as fontes existentes (sem tela nova): estado geral em uma linha, saúde de App, Admin, API/Worker, Supabase, Storage, Vercel e Cloudflare com drawer por componente (o que está acontecendo, medições, problemas relacionados, link para a página certa);
