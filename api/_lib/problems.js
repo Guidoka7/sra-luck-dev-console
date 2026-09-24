@@ -205,10 +205,10 @@ function detectNotifications(data, out) {
   const lastOf = (tipo) => allLogs.filter(l => l.tipo === tipo).reduce((m, l) => (!m || new Date(l.created_at) > new Date(m) ? l.created_at : m), null);
   const freq = Math.max(1, Number(n.config?.frequencia_atraso_horas) || 24);
   if (n.config?.atraso_habilitado !== false && Number(n.atrasadas) > 0 && ageMs(lastOf('parcela_atrasada')) > (freq + 2) * HOUR) {
-    out.push(problem({ id: 'notificacoes:rotina-atraso', dominio: 'notificacoes', tipo: 'operacional', severidade: 'high', titulo: 'Rotina de lembrete de parcela atrasada parada', descricao: `${n.atrasadas} parcela(s) atrasada(s) e nenhum lembrete enviado nas últimas ${freq + 2}h.`, impacto: 'Clientes em atraso não estão sendo lembradas.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_atrasada') || 'nunca' }], acoes: [{ id: 'notificacoes.verificar_atrasos', label: 'Rodar rotina agora', tipo: 'confirmar', descricao: 'Envia lembretes reais às clientes em atraso (hoje: um por parcela). Só roda com a sua confirmação.' }] }));
+    out.push(problem({ id: 'notificacoes:rotina-atraso', dominio: 'notificacoes', tipo: 'operacional', severidade: 'high', titulo: 'Rotina de lembrete de parcela atrasada parada', descricao: `${n.atrasadas} parcela(s) atrasada(s) e nenhum lembrete enviado nas últimas ${freq + 2}h.`, impacto: 'Clientes em atraso não estão sendo lembradas.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_atrasada') || 'nunca' }], acoes: [{ id: 'link', label: 'Abrir Notificações', tipo: 'link', href: 'notificacoes.html', descricao: 'A correção pelo Dev Console está bloqueada porque o conector M2M do Sra Luck aceita somente leitura (GET/HEAD).' }] }));
   }
   if (Number(n.aVencer) > 0 && ageMs(lastOf('parcela_vencer')) > 26 * HOUR) {
-    out.push(problem({ id: 'notificacoes:rotina-vencimento', dominio: 'notificacoes', tipo: 'operacional', severidade: 'warning', titulo: 'Rotina de lembrete de vencimento sem execução recente', descricao: `${n.aVencer} parcela(s) vencem em até 2 dias e não houve lembrete nas últimas 26h.`, impacto: 'Clientes podem esquecer o vencimento.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_vencer') || 'nunca' }], acoes: [{ id: 'notificacoes.verificar_vencimentos', label: 'Rodar rotina agora', tipo: 'confirmar', descricao: 'Envia lembretes reais de vencimento (hoje: um por parcela). Só roda com a sua confirmação.' }] }));
+    out.push(problem({ id: 'notificacoes:rotina-vencimento', dominio: 'notificacoes', tipo: 'operacional', severidade: 'warning', titulo: 'Rotina de lembrete de vencimento sem execução recente', descricao: `${n.aVencer} parcela(s) vencem em até 2 dias e não houve lembrete nas últimas 26h.`, impacto: 'Clientes podem esquecer o vencimento.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_vencer') || 'nunca' }], acoes: [{ id: 'link', label: 'Abrir Notificações', tipo: 'link', href: 'notificacoes.html', descricao: 'A correção pelo Dev Console está bloqueada porque o conector M2M do Sra Luck aceita somente leitura (GET/HEAD).' }] }));
   }
 }
 
@@ -221,7 +221,7 @@ function detectApp(data, out) {
   const cards = v46Cards(data);
   const aptas = cards.filter(c => c.ativo && !c.acessoAppLiberado && c.appAccess?.canRelease);
   if (aptas.length) {
-    out.push(problem({ id: 'app:aptas-sem-acesso', dominio: 'app', tipo: 'operacional', severidade: aptas.length >= 5 ? 'high' : 'warning', titulo: 'Clientes aptas sem acesso ao app', descricao: `${aptas.length} cliente(s) já cumprem os requisitos (nome, CPF, nascimento e financeiro) e ainda não têm o app liberado.`, impacto: 'A cliente não consegue acompanhar parcelas e agenda pelo app.', ocorrencias: aptas.length, evidencias: aptas.slice(0, 8).map(c => ({ label: c.nome || c.id, valor: c.fila })), alvo: aptas.map(c => ({ id: c.id, nome: c.nome })), acoes: [{ id: 'app.liberar_acesso', label: `Liberar acesso (${Math.min(aptas.length, 25)})`, tipo: 'confirmar', descricao: 'A API oficial valida os requisitos de cada cliente antes de liberar.' }] }));
+    out.push(problem({ id: 'app:aptas-sem-acesso', dominio: 'app', tipo: 'operacional', severidade: aptas.length >= 5 ? 'high' : 'warning', titulo: 'Clientes aptas sem acesso ao app', descricao: `${aptas.length} cliente(s) já cumprem os requisitos (nome, CPF, nascimento e financeiro) e ainda não têm o app liberado.`, impacto: 'A cliente não consegue acompanhar parcelas e agenda pelo app.', ocorrencias: aptas.length, evidencias: aptas.slice(0, 8).map(c => ({ label: c.nome || c.id, valor: c.fila })), alvo: aptas.map(c => ({ id: c.id, nome: c.nome })), acoes: [{ id: 'link', label: 'Abrir Clientes & App', tipo: 'link', href: 'app-cliente.html', descricao: 'A liberação exige mutação no Sra Luck. O conector M2M atual aceita somente leitura, então o Dev Console não deve oferecer uma ação que retornaria 403.' }] }));
   }
   const incompletas = cards.filter(c => c.ativo && c.acessoAppLiberado && c.appAccess && !c.appAccess.canRelease);
   if (incompletas.length) {
@@ -273,7 +273,7 @@ function detectIntegrations(data, out) {
     if (i.estado === 'base_incompleta') {
       out.push(problem({ id: `integracoes:base:${i.id}`, dominio: 'integracoes', tipo: 'configuracao', severidade: 'warning', titulo: `${i.nome}: base de dados incompleta`, descricao: i.detalhes || 'Tabelas/persistência necessárias não estão prontas.', impacto: 'A integração não consegue registrar eventos.', acoes: [{ id: 'link', label: 'Abrir integrações', tipo: 'link', href: 'integracoes.html' }] }));
     } else if (i.credenciaisConfiguradas && !i.conexaoLiveVerificada && i.estado !== 'planejado') {
-      out.push(problem({ id: `integracoes:nao-verificada:${i.id}`, dominio: 'integracoes', tipo: 'configuracao', severidade: 'warning', titulo: `${i.nome}: conexão nunca verificada`, descricao: 'Há credenciais, mas nenhum teste de conexão bem-sucedido registrado.', impacto: 'Uma credencial inválida só seria percebida quando a integração falhar.', alvo: [{ id: i.id, nome: i.nome }], acoes: [{ id: 'integracoes.testar', label: 'Testar conexão', tipo: 'seguro' }] }));
+      out.push(problem({ id: `integracoes:nao-verificada:${i.id}`, dominio: 'integracoes', tipo: 'configuracao', severidade: 'warning', titulo: `${i.nome}: conexão nunca verificada`, descricao: 'Há credenciais, mas nenhum teste de conexão bem-sucedido registrado.', impacto: 'Uma credencial inválida só seria percebida quando a integração falhar.', alvo: [{ id: i.id, nome: i.nome }], acoes: [{ id: 'link', label: 'Abrir Integrações', tipo: 'link', href: 'integracoes.html', descricao: 'O teste via Dev Console depende de POST no Sra Luck e o M2M atual está restrito a leitura.' }] }));
     }
   }
 }
@@ -342,9 +342,8 @@ async function detect(actor) {
 
 // Registro fechado de correções. O cliente só escolhe o id; rota e corpo são daqui.
 const ACTIONS = {
-  // Cobrança financeira nunca roda sozinha: exige confirmação humana (sem autoResolve).
-  'notificacoes.verificar_atrasos': { permissao: 'notifications.manage', seguro: false, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_atrasos' }, ...ctx }) },
-  'notificacoes.verificar_vencimentos': { permissao: 'notifications.manage', seguro: false, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_momentos_especiais' }, ...ctx }) },
+  'notificacoes.verificar_atrasos': { permissao: 'notifications.manage', seguro: true, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_atrasos' }, ...ctx }) },
+  'notificacoes.verificar_vencimentos': { permissao: 'notifications.manage', seguro: true, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_momentos_especiais' }, ...ctx }) },
   'integracoes.testar': {
     permissao: 'integrations.manage', seguro: true,
     run: async (ctx, prob) => {
