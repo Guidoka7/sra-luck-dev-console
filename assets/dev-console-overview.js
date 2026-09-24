@@ -37,7 +37,7 @@
     dev_supabase: ['O banco do Dev Console está sob pressão: histórico e auditoria podem falhar.', 'Veja o banco do Dev Console em Infraestrutura.'],
   };
 
-  const V = {};
+  const V = { retestes: new Map() };
 
   // ------------------------------------------------------------- carga
   async function carregarBase() {
@@ -46,7 +46,14 @@
     for (const [k, r] of res) V[k] = r;
   }
   async function carregarProblemas() { V.problemas = await DC.api('/api/problemas', { timeout: 45000 }); }
-  async function carregarMudancas() { V.changes = await DC.api('/api/github-status?resource=changes', { timeout: 30000 }); }
+  async function carregarMudancas() {
+    // Mudanças + 7 dias de leituras dos testes: base do antes x depois, das regressões e da recorrência.
+    const [ch, hist] = await Promise.all([
+      DC.api('/api/github-status?resource=changes', { timeout: 30000 }),
+      DC.api(`/api/infra-history?series=${encodeURIComponent(DCInvest.PROBES.map((x) => `probe:${x}`).join(','))}&hours=168`, { timeout: 30000 }),
+    ]);
+    V.changes = ch; V.probeHist = hist.ok ? hist.data.series || {} : null;
+  }
 
   // ------------------------------------------------------------- dados
   const infra = () => (V.infra?.ok ? V.infra.data : null);
@@ -165,6 +172,7 @@
     if (ADMIN_AREAS.includes(p.dominio)) return 'admin';
     return null;
   }
+  const FONTES_TESTE_COMP = { ready: 'api', diagnostico: 'supabase', storage: 'storage', app: 'app', visaoGeral: 'admin', configuracoes: 'admin', staff: 'admin', v46: 'admin', previsoes: 'admin', validacoes: 'admin', financeiroResumo: 'admin', clube: 'admin', recompensas: 'admin', notificacoes: 'admin', vapid: 'admin', integracoes: 'admin' };
   const COMP_DA_INFRA = { supabase: 'supabase', backups: 'supabase', cloudflare: 'cloudflare', storage: 'storage' };
 
   // ------------------------------------------------------------- mudanças e correlação
@@ -230,12 +238,31 @@
   }
   const FORCA = { evidencia: ['baseada em evidência', 'ok'], hipotese: ['hipótese', 'warn'], sem: ['sem causa identificada', 'neutral'] };
 
+  // ------------------------------------------------------------- contexto de investigação
+  const ctxInvest = (extra = {}) => ({ mudancas: mudancas(), series: V.probeHist || {}, eventos: V.errors?.ok ? eventos() : null, coberturaDesde: inicioEventos(), areaDoEvento, fontes: fontes(), ready: V.ready || null, changes: V.changes?.ok ? V.changes.data : null, signal, retestes: V.retestes, deps: DEPS, agora: Date.now(), ...extra });
+  // Regressões: cada deploy de produção / migration das últimas 72 h comparado com o período anterior.
+  function regressoes() {
+    if (!V.probeHist) return [];
+    const ctx = ctxInvest();
+    return ctx.mudancas.filter((m) => Date.now() - m.t <= 72 * H).map((m) => DCInvest.compararMudanca(m, ctx));
+  }
+  const TESTE_DA_AREA = { v46: 'v46', financeiro: 'validacoes', app: 'app', notificacoes: 'notificacoes', integracoes: 'integracoes', clube: 'clube', admin: 'visaoGeral', plataforma: 'ready' };
+  function testesDo(p) {
+    const id = String(p.id || '');
+    if (id.startsWith('funcao:')) return [id.slice(7)];
+    if (id === 'plataforma:ready') return ['ready'];
+    if (id.startsWith('plataforma:diagnostico')) return ['diagnostico'];
+    if (id === 'plataforma:storage') return ['storage'];
+    return TESTE_DA_AREA[p.dominio] ? [TESTE_DA_AREA[p.dominio]] : [];
+  }
+  const TESTE_DA_INFRA = { supabase: ['diagnostico'], backups: [], storage: ['storage'], cloudflare: ['ready'] };
+
   // ------------------------------------------------------------- incidentes
   function incidentes(comps) {
     const itens = [], I = infra(), ch = V.changes?.ok ? V.changes.data : null, fs = fontes();
     const byId = Object.fromEntries((comps || componentes()).map((c) => [c.id, c]));
     const temProblema = (id) => problemas().some((p) => p.id === id);
-    if (V.ready && !V.ready.ok && !temProblema('plataforma:ready')) itens.push({ key: 'ready', sev: 'critical', comp: 'api', http: V.ready.status || 0, titulo: 'API do Sra Luck não está pronta', contexto: `/api/ready respondeu HTTP ${V.ready.status || 'sem resposta'} agora`, impacto: 'Clientes e equipe podem não conseguir usar o App e o Admin.', passos: ['Abra Infraestrutura e confira Worker, banco e variáveis.', 'Veja em Engenharia se houve deploy recente; se sim, considere rollback.'], evid: [['/api/ready', `HTTP ${V.ready.status || '—'} · ${ms(V.ready.ms)}`]], href: 'infraestrutura.html' });
+    if (V.ready && !V.ready.ok && !temProblema('plataforma:ready')) itens.push({ key: 'ready', origem: 'ready', testes: ['ready'], sev: 'critical', comp: 'api', http: V.ready.status || 0, titulo: 'API do Sra Luck não está pronta', contexto: `/api/ready respondeu HTTP ${V.ready.status || 'sem resposta'} agora`, impacto: 'Clientes e equipe podem não conseguir usar o App e o Admin.', passos: ['Abra Infraestrutura e confira Worker, banco e variáveis.', 'Veja em Engenharia se houve deploy recente; se sim, considere rollback.'], evid: [['/api/ready', `HTTP ${V.ready.status || '—'} · ${ms(V.ready.ms)}`]], href: 'infraestrutura.html' });
     for (const p of problemas()) {
       if (p.severidade === 'info') continue;
       const id = String(p.id), fonte = id.startsWith('funcao:') ? fs.find((x) => `funcao:${x.id}` === id) : id === 'plataforma:ready' ? fs.find((x) => x.id === 'ready') : null;
@@ -243,7 +270,7 @@
       // Erros agrupados só olham as últimas 24 h: um "desde" colado no limite não é o início real.
       const ancora = id.startsWith('bug:') && p.desde && Date.now() - Date.parse(p.desde) > 23 * H ? null : p.desde || null;
       const operacional = ['operacional', 'dados', 'configuracao'].includes(p.tipo) && http == null;
-      itens.push({ key: id, sev: p.severidade, comp: compDoProblema(p), http, ancora, ultima: p.ultimaVez || p.incidente?.ultimaVez || null, reaberto: p.incidente?.status === 'reopened',
+      itens.push({ key: id, origem: 'problema', fp: `problem:${p.fingerprint || id}`, testes: testesDo(p), tipoProblema: p.tipo, requestIds: p.pacote?.request_ids || [], amostras: p.pacote?.amostras || [], rota: p.pacote?.rota || null, sev: p.severidade, comp: compDoProblema(p), http, ancora, ultima: p.ultimaVez || p.incidente?.ultimaVez || null, reaberto: p.incidente?.status === 'reopened',
         titulo: p.titulo, contexto: [p.ocorrencias > 1 ? `${p.ocorrencias} ocorrências` : null, ancora ? `desde ${quando(ancora)}` : null].filter(Boolean).join(' · '),
         impacto: p.impacto || p.explicacao?.porQue || '', passos: p.explicacao?.comoResolver || [],
         causaBase: operacional ? p.explicacao?.oQue || p.descricao : /^(bug|app:desempenho):/.test(id) ? p.explicacao?.porQue || null : null, causaForca: operacional ? 'evidencia' : 'hipotese',
@@ -252,17 +279,27 @@
     for (const i of I?.incidents || []) {
       if (!['open', 'investigating', 'reopened'].includes(i.status)) continue;
       const src = i.metadata?.source, key = String(i.fingerprint || '').split(':')[2] || '', txt = INFRA_TXT[src] || ['Recurso de infraestrutura fora do normal.', 'Veja o detalhe em Infraestrutura.'], sg = signal(src, key);
-      itens.push({ key: i.fingerprint || i.id, sev: i.severity === 'critical' ? 'critical' : i.severity === 'high' ? 'high' : 'warning', comp: COMP_DA_INFRA[src] || null, http: null, ancora: i.status === 'reopened' ? null : i.first_seen_at, ultima: i.last_seen_at, reaberto: i.status === 'reopened',
+      itens.push({ key: i.fingerprint || i.id, origem: 'infra', fp: i.fingerprint || null, testes: TESTE_DA_INFRA[src] || [], sev: i.severity === 'critical' ? 'critical' : i.severity === 'high' ? 'high' : 'warning', comp: COMP_DA_INFRA[src] || null, http: null, ancora: i.status === 'reopened' ? null : i.first_seen_at, ultima: i.last_seen_at, reaberto: i.status === 'reopened',
         titulo: i.title, contexto: `desde ${quando(i.first_seen_at)} · ${i.occurrence_count || 1} leitura(s) acima do limite · última ${quando(i.last_seen_at)}`, impacto: txt[0], passos: [txt[1]], causaBase: CAUSA_INFRA[key] ? `Causas mais comuns: ${CAUSA_INFRA[key]}` : null,
         evid: [sg ? [sg.label || key, `${sg.unit === '%' ? pct(sg.value) : sg.value} agora (alerta ${sg.warn ?? '—'}, crítico ${sg.crit ?? '—'})`] : null, ['Primeira leitura', DC.dateTimeFmt.format(new Date(i.first_seen_at))], ['Leituras acima do limite', String(i.occurrence_count || 1)]].filter(Boolean), href: 'infraestrutura.html' });
     }
-    if (ch?.ci?.status === 'completed' && ch.ci.conclusion === 'failure') itens.push({ key: 'ci', sev: 'high', comp: null, http: null, ancora: ch.ci.created_at, titulo: 'CI da main do Sra Luck falhou', contexto: `${ch.ci.name} · ${quando(ch.ci.updated_at || ch.ci.created_at)}`, impacto: 'O código mais recente não passou nos testes; publicá-lo pode quebrar algo.', passos: ['Abra Engenharia e veja o log do job que falhou.', 'Corrija na main ou re-rode se a falha for de infraestrutura do GitHub.'], causaBase: `O workflow "${ch.ci.name}" falhou no commit ${(ch.ci.head_sha || '').slice(0, 7)}; a causa exata está no log do job.`, causaForca: 'evidencia', evid: [['Workflow', ch.ci.name], ['Commit', (ch.ci.head_sha || '').slice(0, 7) || '—']], href: 'engenharia.html' });
+    if (ch?.ci?.status === 'completed' && ch.ci.conclusion === 'failure') itens.push({ key: 'ci', origem: 'ci', testes: [], sha: ch.ci.head_sha, sev: 'high', comp: null, http: null, ancora: ch.ci.created_at, titulo: 'CI da main do Sra Luck falhou', contexto: `${ch.ci.name} · ${quando(ch.ci.updated_at || ch.ci.created_at)}`, impacto: 'O código mais recente não passou nos testes; publicá-lo pode quebrar algo.', passos: ['Abra Engenharia e veja o log do job que falhou.', 'Corrija na main ou re-rode se a falha for de infraestrutura do GitHub.'], causaBase: `O workflow "${ch.ci.name}" falhou no commit ${(ch.ci.head_sha || '').slice(0, 7)}; a causa exata está no log do job.`, causaForca: 'evidencia', evid: [['Workflow', ch.ci.name], ['Commit', (ch.ci.head_sha || '').slice(0, 7) || '—']], href: 'engenharia.html' });
     const prodDep = ch?.deploy?.producao, ultimoProd = (ch?.deploy?.recentes || []).find((d) => d.target === 'production');
-    if (ultimoProd?.state === 'ERROR') itens.push({ key: 'deploy', sev: 'high', comp: 'vercel', http: null, ancora: null, titulo: 'Último deploy de produção falhou', contexto: quando(new Date(ultimoProd.createdAt).toISOString()), impacto: 'A versão nova não entrou no ar; as clientes seguem na anterior.', passos: ['Abra Engenharia, veja o erro de build e faça redeploy depois de corrigir.'], causaBase: 'O build ou a verificação do deploy falhou; a mensagem exata está no log de build da Vercel.', causaForca: 'evidencia', evid: [['Commit', (ultimoProd.sha || '').slice(0, 7) || '—'], ['Mensagem', ultimoProd.message || '—']], href: 'engenharia.html' });
+    if (ultimoProd?.state === 'ERROR') itens.push({ key: 'deploy', origem: 'deploy', testes: [], sha: ultimoProd.sha, sev: 'high', comp: 'vercel', http: null, ancora: null, titulo: 'Último deploy de produção falhou', contexto: quando(new Date(ultimoProd.createdAt).toISOString()), impacto: 'A versão nova não entrou no ar; as clientes seguem na anterior.', passos: ['Abra Engenharia, veja o erro de build e faça redeploy depois de corrigir.'], causaBase: 'O build ou a verificação do deploy falhou; a mensagem exata está no log de build da Vercel.', causaForca: 'evidencia', evid: [['Commit', (ultimoProd.sha || '').slice(0, 7) || '—'], ['Mensagem', ultimoProd.message || '—']], href: 'engenharia.html' });
     if (ch?.sincronia?.estado === 'producao_atras') {
       const s = ch.sincronia, doMain = (ch.deploy?.recentes || []).find((d) => d.sha && d.sha === s.mainSha);
       const causa = !doMain ? 'Nenhum dos 12 últimos deploys da Vercel é do commit atual da main: o deploy automático não rodou (desligado, fila ou limite diário de deploys do plano).' : doMain.state === 'ERROR' ? `O deploy do commit da main falhou (${doMain.target === 'production' ? 'produção' : 'preview'}): veja o log de build.` : doMain.target !== 'production' ? 'Existe deploy do commit da main, mas só como preview: falta promover para produção.' : `O deploy do commit da main está em ${String(doMain.state || '').toLowerCase()}.`;
-      itens.push({ key: 'sync', sev: 'warning', comp: 'vercel', http: null, ancora: null, titulo: `Produção ${s.commitsAtras} commit(s) atrás da main`, contexto: `produção ${String(s.producaoSha).slice(0, 7)} · main ${String(s.mainSha).slice(0, 7)}`, impacto: 'Correções já integradas na main ainda não chegaram às clientes.', passos: ['Em Engenharia, faça o redeploy/promoção do commit da main (confira o CI antes).'], causaBase: causa, causaForca: 'evidencia', evid: [['Produção', `${String(s.producaoSha).slice(0, 7)}${prodDep?.message ? ` · ${prodDep.message}` : ''}`], ['Main', `${String(s.mainSha).slice(0, 7)}${ch.main?.message ? ` · ${ch.main.message}` : ''}`], ['Deploy do commit da main', doMain ? `${doMain.state} · ${doMain.target}` : 'não encontrado']], href: 'engenharia.html' });
+      itens.push({ key: 'sync', origem: 'sync', testes: [], sev: 'warning', comp: 'vercel', http: null, ancora: null, titulo: `Produção ${s.commitsAtras} commit(s) atrás da main`, contexto: `produção ${String(s.producaoSha).slice(0, 7)} · main ${String(s.mainSha).slice(0, 7)}`, impacto: 'Correções já integradas na main ainda não chegaram às clientes.', passos: ['Em Engenharia, faça o redeploy/promoção do commit da main (confira o CI antes).'], causaBase: causa, causaForca: 'evidencia', evid: [['Produção', `${String(s.producaoSha).slice(0, 7)}${prodDep?.message ? ` · ${prodDep.message}` : ''}`], ['Main', `${String(s.mainSha).slice(0, 7)}${ch.main?.message ? ` · ${ch.main.message}` : ''}`], ['Deploy do commit da main', doMain ? `${doMain.state} · ${doMain.target}` : 'não encontrado']], href: 'engenharia.html' });
+    }
+    // Só uma falha técnica atual do mesmo teste (resposta HTTP) já cobre a regressão; pendência operacional não.
+    const cobertos = new Set(itens.filter((i) => i.http != null).flatMap((i) => i.testes || []));
+    for (const c of regressoes()) for (const l of c.regressoes) {
+      const teste = l.chave.startsWith('probe:') ? l.chave.slice(6) : null;
+      if (teste && cobertos.has(teste)) continue;
+      const nome = c.mudanca.tipo === 'deploy' ? `deploy ${c.mudanca.ref}` : c.mudanca.titulo;
+      itens.push({ key: `regressao:${c.mudanca.tipo}:${c.mudanca.t}:${l.chave}`, origem: 'regressao', testes: teste ? [teste] : [], mudanca: c.mudanca, sev: 'warning', comp: teste ? (FONTES_TESTE_COMP[teste] || null) : null, http: null, ancora: new Date(c.mudanca.t).toISOString(),
+        titulo: `Regressão após ${nome}: ${l.nome.replace(/^Teste · |^Erros · /, '')}`, contexto: `${l.texto} Comparado com até 24 h antes da mudança.`, impacto: teste ? 'A função responde pior desde a mudança; clientes e equipe podem sentir lentidão ou erro.' : 'Mais erros registrados desde a mudança.',
+        passos: ['Abra o antes x depois desta mudança e confirme com um reteste.', 'Se confirmar, compare o código do deploy com o anterior em Engenharia; o rollback é decisão sua.'], causaBase: `Piorou depois de ${nome}: ${l.texto}`, causaForca: 'evidencia', evid: [['Antes', l.antes], ['Depois', l.depois]], href: 'engenharia.html' });
     }
     for (const i of itens) { i.diag = diagnosticar(i, byId); i.acao = i.passos[0] || ''; }
     return itens.sort((a, b) => SEV[a.sev][0] - SEV[b.sev][0] || (b.diag.perto.length - a.diag.perto.length));
@@ -320,12 +357,14 @@
       : s.estado === 'divergente' ? `<div class="dc-ov-sync warn"><strong>Produção roda um commit fora da main</strong><span class="dc-mono">${esc(String(s.producaoSha).slice(0, 7))}</span></div>`
       : `<div class="dc-ov-sync neutral"><strong>Não dá para afirmar se produção = main</strong><span>${esc(s.motivo || 'Faltam dados para comparar.')}</span></div>`;
     const itens = [];
-    for (const d of (c.deploy?.recentes || []).filter((x) => x.target === 'production').slice(0, 4)) itens.push({ tipo: 'deploy', data: d.createdAt ? new Date(d.createdAt).toISOString() : null, titulo: d.message || 'Deploy de produção', sub: `${(d.sha || '').slice(0, 7) || 'sem commit'}${d.current ? ' · em produção agora' : ''}`, chip: [d.state || '—', d.state === 'READY' ? 'ok' : d.state === 'ERROR' ? 'bad' : 'warn'] });
+    const regs = regressoes(), veredito = (tipo, t) => { const r = regs.find((x) => x.mudanca.tipo === tipo && x.mudanca.t === t); return !r ? null : r.regressoes.length ? [`${r.regressoes.length} regressão(ões)`, 'bad'] : r.melhoras.length ? ['Melhorou', 'ok'] : null; };
+    for (const d of (c.deploy?.recentes || []).filter((x) => x.target === 'production').slice(0, 4)) itens.push({ tipo: 'deploy', t: Number(d.createdAt), reg: veredito('deploy', Number(d.createdAt)), data: d.createdAt ? new Date(d.createdAt).toISOString() : null, titulo: d.message || 'Deploy de produção', sub: `${(d.sha || '').slice(0, 7) || 'sem commit'}${d.current ? ' · em produção agora' : ''}`, chip: [d.state || '—', d.state === 'READY' ? 'ok' : d.state === 'ERROR' ? 'bad' : 'warn'] });
     for (const m of c.commits?.slice(0, 5) || []) itens.push({ tipo: 'commit', data: m.date, titulo: m.message, sub: `${m.sha.slice(0, 7)} · ${m.author || ''}` });
     for (const r of c.runs?.slice(0, 3) || []) itens.push({ tipo: 'ci', data: r.updated_at || r.created_at, titulo: r.name, sub: (r.head_sha || '').slice(0, 7), chip: r.status !== 'completed' ? ['Rodando', 'warn'] : r.conclusion === 'success' ? ['Passou', 'ok'] : [r.conclusion === 'failure' ? 'Falhou' : r.conclusion || '—', r.conclusion === 'failure' ? 'bad' : 'neutral'] });
-    for (const m of c.migrations?.itens || []) itens.push({ tipo: 'migration', data: m.alteradaEm, titulo: m.arquivo, sub: 'no repositório · aplicação no banco é manual' });
+    for (const m of c.migrations?.itens || []) itens.push({ tipo: 'migration', t: Date.parse(m.alteradaEm), reg: veredito('migration', Date.parse(m.alteradaEm)), data: m.alteradaEm, titulo: m.arquivo, sub: 'no repositório · aplicação no banco é manual' });
     itens.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
-    el.innerHTML = itens.slice(0, 12).map((i) => `<div class="dc-ov-change"><span class="dc-ov-change-type"><i data-lucide="${TIPO[i.tipo][1]}"></i>${TIPO[i.tipo][0]}</span><span class="dc-ov-comp-main"><strong>${esc(i.titulo)}</strong><small>${esc(i.sub)}</small></span>${i.chip ? DC.chip(i.chip[0], i.chip[1]) : ''}<time class="dc-muted">${esc(quando(i.data))}</time></div>`).join('') || '<div class="dc-empty">Sem alterações recentes.</div>';
+    const comparavel = (i) => (i.tipo === 'deploy' || i.tipo === 'migration') && Number.isFinite(i.t);
+    el.innerHTML = itens.slice(0, 12).map((i) => `<${comparavel(i) ? `button class="dc-ov-change is-link" data-mudanca="${i.tipo}:${i.t}" title="Ver antes x depois"` : 'div class="dc-ov-change"'}><span class="dc-ov-change-type"><i data-lucide="${TIPO[i.tipo][1]}"></i>${TIPO[i.tipo][0]}</span><span class="dc-ov-comp-main"><strong>${esc(i.titulo)}</strong><small>${esc(i.sub)}</small></span>${i.reg ? DC.chip(i.reg[0], i.reg[1]) : i.chip ? DC.chip(i.chip[0], i.chip[1]) : ''}<time class="dc-muted">${esc(quando(i.data))}</time></${comparavel(i) ? 'button' : 'div'}>`).join('') || '<div class="dc-empty">Sem alterações recentes.</div>';
   }
 
   // ------------------------------------------------------------- histórico
@@ -374,37 +413,85 @@
       + (observar.length ? `<details class="dc-ov-watch"><summary><span>Em observação</span>${DC.chip(String(observar.length), 'warn')}<small>Não exigem ação agora; acompanhe se crescerem.</small></summary>${observar.map((i) => `<button class="dc-ov-watch-row" data-inc="${esc(i.key)}"><span class="dc-fn-dot warn"></span><span class="dc-ov-comp-main"><strong>${esc(i.titulo)}</strong><small>${esc(i.impacto || i.contexto || '')}</small></span>${i.diag.perto.length ? DC.chip('mudança próxima', 'info') : ''}</button>`).join('')}</details>` : '');
   }
 
-  // ------------------------------------------------------------- drawer de incidente
-  function linhaDoTempo(i) {
-    const ev = [];
-    if (i.ancora) ev.push({ t: Date.parse(i.ancora), txt: 'Início detectado', tipo: 'inicio' });
-    if (i.ultima) ev.push({ t: Date.parse(i.ultima), txt: 'Última ocorrência', tipo: 'ultima' });
-    const t0 = Date.parse(i.ancora || i.ultima || '') || Date.now();
-    for (const m of mudancas()) if (m.t >= t0 - 24 * H && m.t <= Date.now()) ev.push({ t: m.t, txt: m.tipo === 'deploy' ? `Deploy de produção ${m.ref}${m.estado && m.estado !== 'READY' ? ` (${m.estado})` : ''} · ${m.titulo}` : `Migration ${m.titulo} entrou na main`, tipo: m.tipo, perto: i.diag.perto.some((x) => x.t === m.t && x.tipo === m.tipo) });
-    return ev.filter((e) => Number.isFinite(e.t)).sort((a, b) => b.t - a.t);
+  // ------------------------------------------------------------- drawer de incidente (investigação guiada)
+  async function copiar(texto, rotulo = 'Relatório copiado.') {
+    try { await navigator.clipboard.writeText(texto); DC.toast(rotulo); } catch { DC.toast('Não foi possível copiar neste navegador.', true); }
   }
-  function resumoTexto(i) {
-    return [`[${SEV[i.sev][1]}] ${i.titulo}`, i.contexto, `Causa provável (${FORCA[i.diag.forca][0]}): ${i.diag.texto}`, i.impacto ? `Impacto: ${i.impacto}` : '', i.passos.length ? `O que fazer:\n${i.passos.map((p, n) => `${n + 1}. ${p}`).join('\n')}` : '',
-      i.evid.length ? `Evidências:\n${i.evid.map(([k, v]) => `- ${k}: ${v}`).join('\n')}` : '', i.diag.perto.length ? `Mudanças próximas:\n${i.diag.perto.map((m) => `- ${m.tipo} ${m.tipo === 'deploy' ? m.ref : m.titulo} (${quandoRel(m)})`).join('\n')}` : '', `Gerado pelo Dev Console em ${new Date().toLocaleString('pt-BR')}`].filter(Boolean).join('\n\n');
+  const historicos = new Map();
+  async function carregarHistorico(fp) {
+    if (!fp) return null;
+    const r = await DC.api(`/api/problemas?incidente=${encodeURIComponent(fp)}`);
+    const h = r.ok ? r.data : { erro: r.error || 'Histórico indisponível.' };
+    historicos.set(fp, h);
+    return h;
   }
-  async function copiar(texto) {
-    try { await navigator.clipboard.writeText(texto); DC.toast('Resumo copiado.'); } catch { DC.toast('Não foi possível copiar neste navegador.', true); }
+  // Mudança a comparar: a suspeita (mais próxima do início) ou, numa regressão, a própria mudança.
+  const mudancaDoIncidente = (i) => i.mudanca || i.diag.perto[0] || null;
+
+  async function retestar(teste, btn) {
+    const r = await DC.action(btn, () => DC.api('/api/problemas', { method: 'POST', body: { teste }, timeout: 30000 }), { success: null });
+    if (r?.ok && r.data?.fonte) {
+      V.retestes.set(teste, r.data.fonte);
+      const f = r.data.fonte;
+      DC.toast(`Reteste de ${DCInvest.PROBE_NOME[teste] || teste}: ${f.ok ? `OK em ${ms(f.ms)}` : `${f.status ? `HTTP ${f.status}` : 'sem resposta'}`}`, !f.ok);
+      // O reteste também entra no histórico gravado: recarrega as séries para a linha do tempo.
+      if (f.gravado) { const hist = await DC.api(`/api/infra-history?series=${encodeURIComponent(DCInvest.PROBES.map((x) => `probe:${x}`).join(','))}&hours=168`, { timeout: 30000 }); if (hist.ok) V.probeHist = hist.data.series || {}; }
+    }
+    return r;
   }
-  function drawerIncidente(key) {
+
+  function drawerIncidente(key, opts = {}) {
     const comps = componentes(), i = incidentes(comps).find((x) => x.key === key); if (!i) return;
-    const comp = comps.find((c) => c.id === i.comp), tl = linhaDoTempo(i);
-    const ov = DC.openDrawer(i.titulo, `<div class="dc-ov-drawer-head">${DC.chip(SEV[i.sev][1], SEV[i.sev][2])}${i.reaberto ? DC.chip('Voltou depois de resolvido', 'purple') : ''}${comp ? `<button class="dc-btn" data-open-comp="${comp.id}">${esc(comp.nome)} · ${esc(TONE_LABEL[comp.tone])}</button>` : ''}</div>
+    const comp = comps.find((c) => c.id === i.comp), m = mudancaDoIncidente(i);
+    const hist = i.fp ? historicos.get(i.fp) : null;
+    const ctx = ctxInvest({ historico: hist && !hist.erro ? hist : null, byId: Object.fromEntries(comps.map((c) => [c.id, c])) });
+    // No incidente, compara só os testes dele e os erros da área do componente (sem ruído das outras áreas).
+    const AREA_ERROS = { app: ['App da cliente'], admin: ['Admin'], api: ['API e rotinas'] };
+    ctx.comparacao = m ? DCInvest.compararMudanca(m, ctx, i.testes?.length ? i.testes : undefined, AREA_ERROS[i.comp] || (i.testes?.length ? [] : undefined)) : null;
+    const ck = DCInvest.passos(i, ctx), tl = DCInvest.linhaDoTempo(i, ctx), rec = DCInvest.recorrencia(i, ctx);
+    const corpo = `<div class="dc-ov-drawer-head">${DC.chip(SEV[i.sev][1], SEV[i.sev][2])}${i.reaberto ? DC.chip('Voltou depois de resolvido', 'purple') : ''}${rec.texto ? DC.chip(`Recorrente: ${rec.texto}`, 'purple') : ''}${comp ? `<button class="dc-btn" data-open-comp="${comp.id}">${esc(comp.nome)} · ${esc(TONE_LABEL[comp.tone])}</button>` : ''}</div>
       ${i.contexto ? `<p class="dc-ov-p dc-muted">${esc(i.contexto)}</p>` : ''}
       <h3 class="dc-nc-h">Causa provável <span class="dc-ov-forca ${FORCA[i.diag.forca][1]}">${FORCA[i.diag.forca][0]}</span></h3><p class="dc-ov-p">${esc(i.diag.texto)}</p>
       ${i.diag.base.length ? `<p class="dc-ov-p dc-muted">Com base em: ${esc(i.diag.base.join('; '))}.</p>` : ''}
       ${i.impacto ? `<h3 class="dc-nc-h">Impacto</h3><p class="dc-ov-p">${esc(i.impacto)}</p>` : ''}
-      ${i.passos.length ? `<h3 class="dc-nc-h">O que fazer, em ordem</h3><ol class="dc-ov-steps">${i.passos.map((p) => `<li>${esc(p)}</li>`).join('')}</ol>` : ''}
+      <h3 class="dc-nc-h">Checklist de diagnóstico</h3>${DCInvest.checklistHtml(ck)}
+      ${ctx.comparacao ? `<details class="dc-ov-cmp" id="incCmp"${opts.abrirComparacao ? ' open' : ''}><summary>Antes x depois de ${esc(m.tipo === 'deploy' ? `deploy ${m.ref}` : m.titulo)}${ctx.comparacao.regressoes.length ? DC.chip(`${ctx.comparacao.regressoes.length} regressão(ões)`, 'bad') : ''}</summary>${DCInvest.tabelaComparacao(ctx.comparacao)}</details>` : ''}
       ${i.evid.length ? `<h3 class="dc-nc-h">Evidências</h3><div class="dc-list">${i.evid.map(([k, v]) => `<div class="dc-row" style="grid-template-columns:minmax(90px,.4fr) 1fr"><span>${esc(k)}</span><b class="dc-ov-evid">${esc(v)}</b></div>`).join('')}</div>` : ''}
-      <h3 class="dc-nc-h">Linha do tempo</h3>${tl.length ? `<ol class="dc-ov-tl">${tl.map((e) => `<li class="${e.tipo}${e.perto ? ' perto' : ''}"><time>${esc(DC.dateTimeFmt.format(new Date(e.t)))}</time><span>${esc(e.txt)}</span>${e.perto ? DC.chip('suspeita', 'warn') : ''}</li>`).join('')}</ol>` : `<div class="dc-empty">${V.changes?.ok ? 'Sem início registrado e sem mudanças nas 24 h anteriores.' : 'Não foi possível ler deploys e migrations agora.'}</div>`}
-      ${!i.ancora ? '<p class="dc-ov-p dc-muted">O início deste problema não está registrado, então não dá para cruzar com mudanças com segurança.</p>' : ''}`,
-      { footer: `<button class="dc-btn" data-copy><i data-lucide="copy"></i>Copiar resumo</button><a class="dc-btn primary" href="${i.href}">${i.fix ? 'Corrigir na Central' : 'Abrir página'}</a>` });
-    ov.querySelector('[data-copy]').onclick = () => copiar(resumoTexto(i));
-    ov.querySelector('[data-open-comp]')?.addEventListener('click', (e) => drawerComponente(e.currentTarget.dataset.openComp));
+      <h3 class="dc-nc-h">Linha do tempo do incidente</h3>${DCInvest.linhaDoTempoHtml(tl)}
+      ${i.fp && !hist ? '<p class="dc-ov-p dc-muted" id="incHistLoading">Carregando eventos gravados do incidente…</p>' : hist?.erro ? `<p class="dc-ov-p dc-muted">${esc(hist.erro)}</p>` : ''}
+      ${!V.probeHist ? '<p class="dc-ov-p dc-muted">Histórico dos testes indisponível agora: comparação e recorrência ficam sem dados.</p>' : ''}
+      <p class="dc-ov-p dc-muted">O painel só testa e reúne evidências; nenhuma correção é aplicada em produção daqui.</p>`;
+    const ov = DC.openDrawer(i.titulo, corpo, { footer: `<button class="dc-btn" data-copy><i data-lucide="clipboard-list"></i>Copiar relatório técnico</button><a class="dc-btn primary" href="${i.href}">${i.fix ? 'Corrigir na Central' : 'Abrir página'}</a>` });
+    ov.querySelector('.dc-drawer')?.classList.add('wide');
+    const scroll = opts.scroll != null ? opts.scroll : 0; if (scroll) ov.querySelector('.dc-drawer-body').scrollTop = scroll;
+    ov.querySelector('[data-copy]').onclick = () => copiar(DCInvest.relatorio({ ...i, sevNome: SEV[i.sev][1], forcaNome: FORCA[i.diag.forca][0] }, ctx, ck, comp ? { nome: comp.nome, toneNome: TONE_LABEL[comp.tone] } : null, tl, rec), 'Relatório técnico copiado (Markdown).');
+    const reabrir = (o = {}) => drawerIncidente(key, { scroll: ov.querySelector('.dc-drawer-body')?.scrollTop || 0, ...o });
+    ov.addEventListener('click', async (e) => {
+      const c = e.target.closest('[data-open-comp]'); if (c) return drawerComponente(c.dataset.openComp);
+      const b = e.target.closest('[data-ck]'); if (!b) return;
+      if (b.dataset.ck === 'reteste') { await retestar(b.dataset.teste, b); if (ov.isConnected) reabrir(); }
+      else if (b.dataset.ck === 'reverificar') { await DC.action(b, async () => { await carregarProblemas(); return { ok: Boolean(V.problemas?.ok) }; }, { success: 'Problemas reverificados.' }); renderTudo(); if (!incidentes().some((x) => x.key === key)) { DC.toast('A pendência não aparece mais na leitura atual.'); ov.remove(); } else if (ov.isConnected) reabrir(); }
+      else if (b.dataset.ck === 'comparar') { const d = ov.querySelector('#incCmp'); if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }
+    });
+    if (i.fp && !hist) carregarHistorico(i.fp).then(() => { if (ov.isConnected) reabrir(); });
+  }
+
+  // ------------------------------------------------------------- drawer de mudança (antes x depois)
+  function drawerMudanca(tipo, t) {
+    const ctx = ctxInvest(), m = ctx.mudancas.find((x) => x.tipo === tipo && x.t === t); if (!m) return;
+    const c = DCInvest.compararMudanca(m, ctx);
+    const incs = incidentes().filter((i) => i.diag.perto.some((x) => x.tipo === tipo && x.t === t) || (i.mudanca && i.mudanca.tipo === tipo && i.mudanca.t === t));
+    const titulo = tipo === 'deploy' ? `Deploy ${m.ref}` : m.titulo;
+    const resumo = c.regressoes.length ? `<div class="dc-critical-box"><b>${c.regressoes.length} regressão(ões) depois desta mudança.</b> ${esc(c.regressoes.map((l) => `${l.nome}: ${l.texto}`).join(' · '))}</div>` : c.linhas.every((l) => l.veredito === 'sem_dados') ? '<div class="dc-note">Ainda não há leituras suficientes em volta desta mudança para comparar.</div>' : `<div class="dc-ok-box">Nenhuma métrica piorou depois desta mudança${c.melhoras.length ? `; ${c.melhoras.length} melhorou(aram)` : ''}.</div>`;
+    const ov = DC.openDrawer(titulo, `<p class="dc-ov-p">${esc(tipo === 'deploy' ? `${m.titulo} · ${m.estado || ''}${m.atual ? ' · em produção agora' : ''}` : 'Migration na main. A aplicação no banco é manual e não é verificável daqui: a comparação usa o horário do commit.')}</p>
+      <p class="dc-ov-p dc-muted">${esc(DC.dateTimeFmt.format(new Date(m.t)))} · ${esc(quando(new Date(m.t).toISOString()))}</p>
+      ${resumo}
+      <h3 class="dc-nc-h">Antes x depois</h3>${DCInvest.tabelaComparacao(c)}
+      <h3 class="dc-nc-h">Alertas ligados a esta mudança</h3>${incs.length ? `<div class="dc-ov-watch-list">${incs.map((i) => `<button class="dc-ov-watch-row" data-inc="${esc(i.key)}"><span class="dc-fn-dot ${SEV[i.sev][2] === 'bad' ? 'bad' : 'warn'}"></span><span class="dc-ov-comp-main"><strong>${esc(i.titulo)}</strong><small>${esc(i.impacto || '')}</small></span>${DC.chip(SEV[i.sev][1], SEV[i.sev][2])}</button>`).join('')}</div>` : '<div class="dc-empty">Nenhum alerta aberto começou perto desta mudança.</div>'}`,
+      { footer: `<button class="dc-btn" data-copy><i data-lucide="clipboard-list"></i>Copiar comparação</button><a class="dc-btn primary" href="engenharia.html">Abrir Engenharia</a>` });
+    ov.querySelector('.dc-drawer')?.classList.add('wide');
+    ov.querySelector('[data-copy]').onclick = () => copiar([`## Antes x depois — ${titulo}`, `${DC.dateTimeFmt.format(new Date(m.t))}${tipo === 'deploy' ? ` · ${m.titulo}` : ''}`, `| Métrica | Antes | Depois | Resultado |\n|---|---|---|---|\n${c.linhas.map((l) => `| ${l.nome} | ${l.antes} | ${l.depois} | ${DCInvest.VEREDITO[l.veredito][0]}: ${l.texto} |`).join('\n')}`, `_Janelas: antes ${DC.dateTimeFmt.format(new Date(c.janela.antesIni))}–${DC.dateTimeFmt.format(new Date(c.janela.antesFim))}; depois ${DC.dateTimeFmt.format(new Date(c.janela.depoisIni))}–${DC.dateTimeFmt.format(new Date(c.janela.depoisFim))}. Gerado pelo Dev Console._`].join('\n\n'), 'Comparação copiada (Markdown).');
+    ov.addEventListener('click', (e) => { const b = e.target.closest('[data-inc]'); if (b) drawerIncidente(b.dataset.inc); });
   }
 
   // ------------------------------------------------------------- drawer de componente
@@ -468,24 +555,42 @@
       ${deps ? `<h3 class="dc-nc-h">Dependências</h3><div class="dc-ov-deps">${deps}</div>` : ''}
       <h3 class="dc-nc-h">Evidências agora</h3>
       ${medidas.length ? `<div class="dc-list">${medidas.map(([k, v]) => `<div class="dc-row" style="grid-template-columns:1fr auto"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>` : fsC.length ? '' : '<div class="dc-empty">Sem medições para este componente.</div>'}
-      ${fsC.length ? `<div class="dc-table-wrap" style="margin-top:8px"><table class="dc-compact-table"><thead><tr><th>Teste</th><th>Endpoint</th><th>Resultado</th><th>Tempo</th></tr></thead><tbody>${fsC.map((x) => `<tr><td>${esc(x.label)}</td><td class="dc-mono">${esc(x.path)}</td><td>${x.naoConfigurado ? DC.chip('Sem conector', 'neutral') : x.ok ? DC.chip('OK', 'ok') : DC.chip(`HTTP ${x.status || '—'}`, 'bad')}</td><td>${x.naoConfigurado ? '—' : ms(x.ms)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${fsC.length ? `<div class="dc-table-wrap" style="margin-top:8px"><table class="dc-compact-table">${TABELA_TESTES}<tbody>${fsC.map(linhaTeste).join('')}</tbody></table></div>` : ''}
       ${tipos.length ? `<h3 class="dc-nc-h">Mudanças nas últimas 72 h</h3>${muda.length ? `<div class="dc-ov-links">${muda.map((m) => chipMudanca({ ...m, delta: null })).join('')}</div>` : `<div class="dc-empty">${V.changes?.ok ? 'Nenhum deploy ou migration nas últimas 72 h.' : 'Não foi possível ler deploys e migrations.'}</div>`}` : ''}
       ${outros.length ? `<h3 class="dc-nc-h">Outros pontos (informativos)</h3><div class="dc-ov-watch-list">${outros.slice(0, 8).map((p) => `<button class="dc-ov-watch-row" ${p.severidade === 'info' ? '' : `data-inc="${esc(p.id)}"`}><span class="dc-fn-dot ${SEV[p.severidade]?.[2] === 'bad' ? 'bad' : SEV[p.severidade]?.[2] === 'warn' ? 'warn' : 'neutral'}"></span><span class="dc-ov-comp-main"><strong>${esc(p.titulo)}</strong><small>${esc(p.explicacao?.oQue || p.descricao || '')}</small></span></button>`).join('')}</div>` : ''}
       <p class="dc-muted" style="margin-top:10px;font-size:9.5px">Verificado ${esc(new Date().toLocaleTimeString('pt-BR'))}.</p>`,
       { footer: `<button class="dc-btn" data-copy><i data-lucide="copy"></i>Copiar resumo</button><a class="dc-btn primary" href="${c.href}">Abrir ${esc(c.pagina)}</a>` });
-    ov.querySelector('[data-copy]').onclick = () => copiar(resumoComponente(c, causa, rel, fsC));
+    ov.querySelector('[data-copy]').onclick = () => copiar(resumoComponente(c, causa, rel, fsC), 'Resumo copiado.');
     ov.addEventListener('click', (e) => { const a = e.target.closest('[data-open-comp]'); if (a) return drawerComponente(a.dataset.openComp); const b = e.target.closest('[data-inc]'); if (b) drawerIncidente(b.dataset.inc); });
+    ligarRetestes(ov, fsC);
     historicoComponente(c, ov.querySelector('#compHist'));
   }
 
 
+  // Linha de teste com botão de reteste (mesma função usada no checklist; só leitura no Sra Luck).
+  const resultadoTeste = (x) => (x.naoConfigurado ? DC.chip('Sem conector', 'neutral') : x.ok ? DC.chip('OK', 'ok') : DC.chip(`HTTP ${x.status || '—'}`, 'bad'));
+  const linhaTeste = (x0) => { const r = V.retestes.get(x0.id), x = r || x0; return `<tr data-row="${esc(x0.id)}"><td>${esc(x0.label)}</td><td class="dc-mono">${esc(x0.path)}</td><td>${resultadoTeste(x)}${r ? '<small class="dc-ov-cmp-txt">reteste</small>' : ''}</td><td>${x.naoConfigurado ? '—' : ms(x.ms)}</td><td>${x0.naoConfigurado ? '' : `<button class="dc-icon-btn" data-reteste="${esc(x0.id)}" title="Retestar só esta etapa" aria-label="Retestar ${esc(x0.label)}"><i data-lucide="rotate-cw"></i></button>`}</td></tr>`; };
+  const TABELA_TESTES = '<thead><tr><th>Etapa</th><th>Endpoint</th><th>Resultado</th><th>Tempo</th><th></th></tr></thead>';
+  function ligarRetestes(ov, fs) {
+    ov.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-reteste]'); if (!b) return;
+      e.stopPropagation();
+      const id = b.dataset.reteste, x0 = fs.find((f) => f.id === id);
+      await retestar(id, b);
+      const tr = ov.querySelector(`tr[data-row="${CSS.escape(id)}"]`);
+      if (tr && x0) { tr.outerHTML = linhaTeste(x0); window.lucide?.createIcons(); }
+    });
+  }
+
   function drawerFluxo(id) {
     const f = FLOWS.find((x) => x.id === id); if (!f) return;
     const fs = fontes().filter((x) => f.areas.includes(x.area)), rel = problemas().filter((p) => f.areas.includes(p.dominio));
-    DC.openDrawer(f.nome, `<p class="dc-ov-p">${esc(f.desc)}.</p>
-      <h3 class="dc-nc-h">Etapas testadas agora</h3><div class="dc-table-wrap"><table class="dc-compact-table"><thead><tr><th>Etapa</th><th>Endpoint</th><th>Resultado</th><th>Tempo</th></tr></thead><tbody>${fs.map((x) => `<tr><td>${esc(x.label)}</td><td class="dc-mono">${esc(x.path)}</td><td>${x.naoConfigurado ? DC.chip('Sem conector', 'neutral') : x.ok ? DC.chip('OK', 'ok') : DC.chip(`HTTP ${x.status || '—'}`, 'bad')}</td><td>${x.naoConfigurado ? '—' : ms(x.ms)}</td></tr>`).join('')}</tbody></table></div>
+    const ov = DC.openDrawer(f.nome, `<p class="dc-ov-p">${esc(f.desc)}.</p>
+      <h3 class="dc-nc-h">Etapas testadas</h3><p class="dc-ov-p dc-muted">Use ↻ para retestar só uma etapa, sem rodar a varredura inteira.</p><div class="dc-table-wrap"><table class="dc-compact-table">${TABELA_TESTES}<tbody>${fs.map(linhaTeste).join('')}</tbody></table></div>
       ${fs.some((x) => !x.ok && !x.naoConfigurado) ? '<div class="dc-warn-box" style="margin-top:8px">Uma etapa sem resposta costuma ser: deploy com erro, variável faltando no Sra Luck ou banco indisponível. A Central de Problemas mostra a causa provável e a correção.</div>' : ''}
-      <h3 class="dc-nc-h">Problemas neste fluxo</h3>${rel.length ? rel.map((p) => `<div class="dc-ov-inc ${SEV[p.severidade]?.[2] || 'info'}"><header>${DC.chip(SEV[p.severidade]?.[1] || p.severidade, SEV[p.severidade]?.[2] || 'info')}<strong>${esc(p.titulo)}</strong></header>${p.impacto ? `<p><b>Impacto:</b> ${esc(p.impacto)}</p>` : ''}${p.explicacao?.comoResolver?.[0] ? `<p><b>O que fazer:</b> ${esc(p.explicacao.comoResolver[0])}</p>` : ''}</div>`).join('') : '<div class="dc-empty">Nenhum problema detectado neste fluxo.</div>'}`, { footer: '<a class="dc-btn primary" href="problemas.html">Central de Problemas</a>' });
+      <h3 class="dc-nc-h">Problemas neste fluxo</h3>${rel.length ? rel.map((p) => `<div class="dc-ov-inc ${SEV[p.severidade]?.[2] || 'info'}"><header>${DC.chip(SEV[p.severidade]?.[1] || p.severidade, SEV[p.severidade]?.[2] || 'info')}<strong>${esc(p.titulo)}</strong></header>${p.impacto ? `<p><b>Impacto:</b> ${esc(p.impacto)}</p>` : ''}${p.explicacao?.comoResolver?.[0] ? `<p><b>O que fazer:</b> ${esc(p.explicacao.comoResolver[0])}</p>` : ''}${p.severidade !== 'info' ? `<footer><button class="dc-btn" data-inc="${esc(p.id)}"><i data-lucide="search"></i>Investigar</button></footer>` : ''}</div>`).join('') : '<div class="dc-empty">Nenhum problema detectado neste fluxo.</div>'}`, { footer: '<a class="dc-btn primary" href="problemas.html">Central de Problemas</a>' });
+    ligarRetestes(ov, fs);
+    ov.addEventListener('click', (e) => { const b = e.target.closest('[data-inc]'); if (b) drawerIncidente(b.dataset.inc); });
   }
 
   // ------------------------------------------------------------- ciclo
@@ -516,6 +621,7 @@
     const investigar = (e) => { const b = e.target.closest('[data-inc]'); if (b) drawerIncidente(b.dataset.inc); };
     DC.$('incidents').addEventListener('click', investigar);
     DC.$('ovNext').addEventListener('click', investigar);
+    DC.$('changes').addEventListener('click', (e) => { const b = e.target.closest('[data-mudanca]'); if (!b) return; const [tipo, t] = b.dataset.mudanca.split(':'); drawerMudanca(tipo, Number(t)); });
     DC.$('flows').addEventListener('click', (e) => { const b = e.target.closest('[data-flow]'); if (b) drawerFluxo(b.dataset.flow); });
     DC.$('histRange').addEventListener('click', (e) => { const b = e.target.closest('[data-h]'); if (!b) return; S.hours = Number(b.dataset.h); DC.$('histRange').querySelectorAll('button').forEach((x) => x.classList.toggle('active', x === b)); renderHistorico(); });
     atualizar(true);

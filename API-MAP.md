@@ -49,6 +49,8 @@ A autorização real do Sra Luck continua existindo do outro lado; o RBAC do Dev
 
 - `GET /api/problemas` — detecta problemas em plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações (`monitoring.view`).
   - cada problema com incidente aberto em `dev_incidents` traz `incidente: { status, desde, ultimaVez, varreduras }`; `desde` só é preenchido quando o incidente está aberto (um incidente reaberto não serve de início). A Visão Geral usa `desde` para cruzar o problema com deploys e migrations.
+- `GET /api/problemas?incidente=problem:…|infra:…` — incidente registrado e seus eventos (`opened`, `signal_repeated`, `signal_recovered`, `reopened`, `fix_applied`) para a linha do tempo (`monitoring.view`).
+- `POST /api/problemas` `{ teste }` — reteste de um único teste da Central (ids de `SOURCES` em `api/_lib/problems.js`). É o mesmo GET da varredura, só leitura no Sra Luck; o resultado é gravado em `dev_metric_snapshots` como `probe` com `dimensions.manual=true` (`monitoring.view`, mesma origem).
 - `POST /api/problemas` — `{ problema, acao, params? }` aplica uma correção do registro fechado e verifica se o problema sumiu. A permissão depende da ação:
   - `notificacoes.verificar_atrasos` / `notificacoes.verificar_vencimentos` → `notifications.manage` (seguro, L2)
   - `integracoes.testar` → `integrations.manage` (seguro, L2)
@@ -75,7 +77,7 @@ Só HTTPS público (endereços privados/internos bloqueados, sem seguir redireci
 - `GET /api/infra-supabase?hours=1|6|24` — métricas + erros do Supabase Sra Luck
 - `GET /api/infra-dev-supabase` — saúde/métricas do Supabase próprio do Dev Console
 - `GET /api/infra-history?source=&metric=&hours=` — histórico persistido de recursos
-- `GET /api/infra-history?series=fonte:metrica,...&hours=` — várias séries de uma vez (até 16), usado pelos gráficos de memória e pela Visão Geral (`probe:<fluxo>` = latência real de cada fluxo testado, em ms, gravada a cada varredura)
+- `GET /api/infra-history?series=fonte:metrica,...&hours=` — várias séries de uma vez (até 16), usado pelos gráficos de memória e pela Visão Geral (`probe:<fluxo>` = latência real de cada fluxo testado, em ms, gravada a cada varredura); cada ponto traz `metric_value`, `state`, `observed_at` e `dimensions` (status HTTP, reteste manual)
 - `GET /api/infra-cloudflare` — Worker CPU/memory/request/error metrics
 - `GET /api/infra-vercel` — deploys Vercel + runtime atual
 - `GET /api/infra-runtime` — memória do runtime atual do Dev Console

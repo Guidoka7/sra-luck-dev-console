@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0 — Investigação guiada
+
+- checklist de diagnóstico por tipo de falha (5xx, 401/403, 404, timeout, banco, storage, recurso de infraestrutura, deploy com falha, produção desatualizada, CI, erro de tela, pendência operacional, regressão), em ordem, com cada passo marcado como verificado, confirmado, pista, "verificar você" ou sem dados;
+- reteste de um teste específico (checklist, drawer de fluxo e drawer de componente) sem rodar a varredura inteira; só leitura no Sra Luck, gravado no histórico como reteste manual;
+- antes x depois de cada deploy de produção e migration: mediana de tempo e falhas de cada teste e erros por hora do App, Admin e API, com janela de até 24 h limitada pelas mudanças vizinhas e aviso quando faltam leituras;
+- regressões das últimas 72 h marcadas em "Últimas alterações" e abertas como alerta quando nenhuma falha atual já as cobre;
+- linha do tempo única do incidente: deploys, migrations, início, falhas e recuperações do teste, repetições, reabertura, correções registradas e retestes;
+- recorrência em 7 dias (episódios de falha e reaberturas);
+- "Copiar relatório técnico" em Markdown: componente, tipo de falha, versões, impacto, causa e base, evidências, checklist, antes x depois, linha do tempo e próximos passos, sem dados pessoais de clientes;
+- incidentes de infraestrutura que voltam depois de mitigados agora são reabertos e registram o evento `reopened` (antes ficavam como mitigados e sumiam da visão);
+- nenhuma ação desta etapa corrige produção.
+
 ## 0.7.0 — Diagnóstico na Visão Geral
 
 - cada alerta traz causa provável (marcada como "baseada em evidência", "hipótese" ou "sem causa identificada"), impacto e próxima ação;
