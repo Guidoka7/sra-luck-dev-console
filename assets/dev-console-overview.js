@@ -16,17 +16,8 @@
   const pct = (v) => (v == null || !Number.isFinite(Number(v)) ? '—' : `${Number(v).toFixed(0)}%`);
   const S = { hours: 24 };
 
-  const ADMIN_AREAS = ['admin', 'v46', 'financeiro', 'clube', 'notificacoes', 'integracoes'];
-  const FLOWS = [
-    { id: 'plataforma', nome: 'Acesso e API', desc: 'Prontidão, banco, storage e registro de erros', areas: ['plataforma'] },
-    { id: 'admin', nome: 'Painel Admin', desc: 'Visão geral, configurações e equipe', areas: ['admin'] },
-    { id: 'v46', nome: 'Jornada V46', desc: 'Central da jornada e previsão de liberações', areas: ['v46'] },
-    { id: 'financeiro', nome: 'Financeiro', desc: 'Validação de comprovantes e resumo', areas: ['financeiro'] },
-    { id: 'app', nome: 'App da cliente', desc: 'Acesso, telemetria e desempenho do app', areas: ['app'] },
-    { id: 'clube', nome: 'Clube de vantagens', desc: 'Recompensas, indicações e vouchers', areas: ['clube'] },
-    { id: 'notificacoes', nome: 'Notificações', desc: 'Rotinas, templates e Web Push', areas: ['notificacoes'] },
-    { id: 'integracoes', nome: 'Integrações', desc: 'Gemini, pagamentos, CRM e bancos', areas: ['integracoes'] },
-  ];
+  // Mapa do sistema (componentes, fluxos, dependências, testes) compartilhado com a Central de Incidentes.
+  const { ADMIN_AREAS, FLOWS, DEPS, HOSPEDAGEM, RELACIONADO, dependentes, compDoProblema, FONTES_TESTE_COMP, COMP_DA_INFRA, TESTE_DA_AREA, testesDo, TESTE_DA_INFRA } = DCInvest.MAPA;
   const INFRA_TXT = {
     supabase: ['Banco do Sra Luck lento ou instável: Admin e App podem demorar ou falhar.', 'Veja CPU, RAM e disco em Infraestrutura; se persistir, avalie consultas pesadas ou upgrade do plano.'],
     cloudflare: ['A API usada pelo App e pelo Admin pode responder erro ou lentidão.', 'Abra Infraestrutura → Cloudflare e confira erros e memória do Worker; um deploy recente pode ser a causa.'],
@@ -155,42 +146,13 @@
     return out;
   }
 
-  // ------------------------------------------------------------- dependências
-  // Arquitetura real do sra-luck-react: App e Admin são o mesmo SPA (Vite) publicado na Vercel e
-  // chamam /api/*, que roda o código de worker/ (Edge Function da Vercel em api/[...path].ts; o mesmo
-  // Worker tem configuração Cloudflare em wrangler.jsonc). A API lê e grava no Supabase e no Storage.
-  const DEPS = { app: ['api'], admin: ['api'], api: ['supabase', 'storage'], storage: ['supabase'], supabase: [], vercel: [], cloudflare: [] };
-  const HOSPEDAGEM = { app: 'vercel', admin: 'vercel', api: 'vercel' };
-  const RELACIONADO = { api: ['cloudflare'], cloudflare: ['api'] };
-  const dependentes = (id) => Object.keys(DEPS).filter((k) => DEPS[k].includes(id));
-  function compDoProblema(p) {
-    const id = String(p.id || '');
-    if (id.startsWith('plataforma:diagnostico')) return 'supabase';
-    if (id === 'plataforma:storage') return 'storage';
-    if (p.dominio === 'plataforma') return 'api';
-    if (p.dominio === 'app') return 'app';
-    if (ADMIN_AREAS.includes(p.dominio)) return 'admin';
-    return null;
-  }
-  const FONTES_TESTE_COMP = { ready: 'api', diagnostico: 'supabase', storage: 'storage', app: 'app', visaoGeral: 'admin', configuracoes: 'admin', staff: 'admin', v46: 'admin', previsoes: 'admin', validacoes: 'admin', financeiroResumo: 'admin', clube: 'admin', recompensas: 'admin', notificacoes: 'admin', vapid: 'admin', integracoes: 'admin' };
-  const COMP_DA_INFRA = { supabase: 'supabase', backups: 'supabase', cloudflare: 'cloudflare', storage: 'storage' };
-
   // ------------------------------------------------------------- mudanças e correlação
   // Só entram mudanças que podem alterar produção: deploys de produção e migrations na main.
-  const H = 3600000, ANTES = 6 * H, TOLERANCIA = 15 * 60000;
+  const H = 3600000;
   const dur = (v) => { const m = Math.max(1, Math.round(Math.abs(v) / 60000)); return m < 60 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} dias`; };
-  function mudancas() {
-    const c = V.changes?.ok ? V.changes.data : null; if (!c) return [];
-    const out = [];
-    for (const d of c.deploy?.recentes || []) if (d.target === 'production' && d.createdAt) out.push({ tipo: 'deploy', t: Number(d.createdAt), titulo: d.message || 'Deploy de produção', ref: (d.sha || '').slice(0, 7) || 'sem commit', estado: d.state, atual: d.current });
-    for (const m of c.migrations?.itens || []) if (m.alteradaEm) out.push({ tipo: 'migration', t: Date.parse(m.alteradaEm), titulo: m.arquivo, ref: (m.commit || '').slice(0, 7) });
-    return out.filter((x) => Number.isFinite(x.t)).sort((a, b) => b.t - a.t);
-  }
+  const mudancas = () => DCInvest.mudancasDe(V.changes?.ok ? V.changes.data : null);
   // Mudanças entre 6 h antes e 15 min depois do início (tolerância de relógio). Proximidade no tempo é pista, não prova.
-  function mudancasPerto(ancora) {
-    const t0 = Date.parse(ancora || ''); if (!Number.isFinite(t0)) return [];
-    return mudancas().filter((m) => m.t >= t0 - ANTES && m.t <= t0 + TOLERANCIA).map((m) => ({ ...m, delta: t0 - m.t })).sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
-  }
+  const mudancasPerto = (ancora) => DCInvest.perto(mudancas(), ancora);
   const quandoRel = (m) => (m.delta == null ? quando(new Date(m.t).toISOString()) : m.delta >= 0 ? `${dur(m.delta)} antes do início` : 'junto com o início');
   const chipMudanca = (m) => `<span class="dc-ov-link-chip ${m.tipo}"><i data-lucide="${m.tipo === 'deploy' ? 'rocket' : 'database'}"></i>${m.tipo === 'deploy' ? `Deploy ${esc(m.ref)}` : esc(m.titulo.replace(/^migration_/, '').replace(/\.sql$/, ''))} · ${esc(quandoRel(m))}</span>`;
 
@@ -246,16 +208,6 @@
     const ctx = ctxInvest();
     return ctx.mudancas.filter((m) => Date.now() - m.t <= 72 * H).map((m) => DCInvest.compararMudanca(m, ctx));
   }
-  const TESTE_DA_AREA = { v46: 'v46', financeiro: 'validacoes', app: 'app', notificacoes: 'notificacoes', integracoes: 'integracoes', clube: 'clube', admin: 'visaoGeral', plataforma: 'ready' };
-  function testesDo(p) {
-    const id = String(p.id || '');
-    if (id.startsWith('funcao:')) return [id.slice(7)];
-    if (id === 'plataforma:ready') return ['ready'];
-    if (id.startsWith('plataforma:diagnostico')) return ['diagnostico'];
-    if (id === 'plataforma:storage') return ['storage'];
-    return TESTE_DA_AREA[p.dominio] ? [TESTE_DA_AREA[p.dominio]] : [];
-  }
-  const TESTE_DA_INFRA = { supabase: ['diagnostico'], backups: [], storage: ['storage'], cloudflare: ['ready'] };
 
   // ------------------------------------------------------------- incidentes
   function incidentes(comps) {
@@ -461,7 +413,7 @@
       ${i.fp && !hist ? '<p class="dc-ov-p dc-muted" id="incHistLoading">Carregando eventos gravados do incidente…</p>' : hist?.erro ? `<p class="dc-ov-p dc-muted">${esc(hist.erro)}</p>` : ''}
       ${!V.probeHist ? '<p class="dc-ov-p dc-muted">Histórico dos testes indisponível agora: comparação e recorrência ficam sem dados.</p>' : ''}
       <p class="dc-ov-p dc-muted">O painel só testa e reúne evidências; nenhuma correção é aplicada em produção daqui.</p>`;
-    const ov = DC.openDrawer(i.titulo, corpo, { footer: `<button class="dc-btn" data-copy><i data-lucide="clipboard-list"></i>Copiar relatório técnico</button><a class="dc-btn primary" href="${i.href}">${i.fix ? 'Corrigir na Central' : 'Abrir página'}</a>` });
+    const ov = DC.openDrawer(i.titulo, corpo, { footer: `<button class="dc-btn" data-copy><i data-lucide="clipboard-list"></i>Copiar relatório técnico</button>${i.fp ? `<a class="dc-btn" href="incidentes.html#${encodeURIComponent(i.fp)}"><i data-lucide="siren"></i>Acompanhar</a>` : ''}<a class="dc-btn primary" href="${i.href}">${i.fix ? 'Corrigir na Central' : 'Abrir página'}</a>` });
     ov.querySelector('.dc-drawer')?.classList.add('wide');
     const scroll = opts.scroll != null ? opts.scroll : 0; if (scroll) ov.querySelector('.dc-drawer-body').scrollTop = scroll;
     ov.querySelector('[data-copy]').onclick = () => copiar(DCInvest.relatorio({ ...i, sevNome: SEV[i.sev][1], forcaNome: FORCA[i.diag.forca][0] }, ctx, ck, comp ? { nome: comp.nome, toneNome: TONE_LABEL[comp.tone] } : null, tl, rec), 'Relatório técnico copiado (Markdown).');
@@ -607,6 +559,13 @@
     await Promise.all([carregarBase(), completo || !V.problemas ? carregarProblemas() : null, completo || !V.changes ? carregarMudancas() : null]);
     renderTudo();
     renderHistorico();
+    // Vindo da Central de Incidentes (?investigar=<chave>): abre a investigação guiada do alerta.
+    const alvo = new URLSearchParams(location.search).get('investigar');
+    if (alvo && !V.abriuInvestigacao) {
+      V.abriuInvestigacao = true;
+      if (incidentes().some((x) => x.key === alvo)) drawerIncidente(alvo);
+      else DC.toast('Esse incidente não aparece na leitura atual: pode já ter parado. Veja a linha do tempo na Central de Incidentes.');
+    }
   }
 
   async function varredura(btn) {

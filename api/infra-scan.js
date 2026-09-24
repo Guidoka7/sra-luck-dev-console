@@ -5,6 +5,7 @@ const { rest, audit } = require('./_lib/supabase');
 const { detect, applyAction, autoResolve, persistIncidents, persistProbes, testarFonte, historicoIncidente } = require('./_lib/problems');
 const customApis = require('./_lib/custom-apis');
 const agents = require('./_lib/agents');
+const incidents = require('./_lib/incidents');
 const { hasPermission } = require('./_lib/rbac');
 const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
 
@@ -38,12 +39,14 @@ async function sustained(source,key,current,t,observedAt){
 }
 async function upsertIncident(signal,t,observedAt){
  const fingerprint=`infra:${signal.source}:${signal.key}`;
- let existing=[];try{existing=await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count,severity&limit=1`,{method:'GET'})}catch{}
+ let existing=[];try{existing=await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count,severity,metadata&limit=1`,{method:'GET'})}catch{}
  const severity=signal.state==='critical'?'critical':'high';
  if(existing[0]){
-  const row=existing[0];const nextStatus=row.status==='resolved'||row.status==='mitigated'?'reopened':row.status;
+  const row=existing[0];const manual=row.metadata?.manual;
+  // Resolvido volta a abrir se o sinal voltar; mitigado só reabre se a mitigação foi automática (não marcada por alguém).
+  const nextStatus=row.status==='resolved'||(row.status==='mitigated'&&manual?.status!=='mitigated')?'reopened':row.status;
   if(nextStatus==='reopened'&&row.status!=='reopened')try{await rest('dev_incident_events',{method:'POST',body:JSON.stringify({incident_id:row.id,event_type:'reopened',message:`${signal.label} voltou a ${signal.state==='critical'?'crítico':'degradado'} depois de recuperar.`,details:{value:signal.value,unit:signal.unit}})})}catch{}
-  const updated=await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',body:JSON.stringify({status:nextStatus,severity,occurrence_count:Number(row.occurrence_count||0)+1,last_seen_at:observedAt,metadata:{source:signal.source,metric_key:signal.key,value:signal.value,unit:signal.unit,warning:t.warning_value,critical:t.critical_value,sustain_seconds:t.sustain_seconds}})});
+  const updated=await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',body:JSON.stringify({status:nextStatus,severity,occurrence_count:Number(row.occurrence_count||0)+1,last_seen_at:observedAt,...(nextStatus==='reopened'?{resolved_at:null}:{}),metadata:{...(manual?{manual}:{}),source:signal.source,metric_key:signal.key,value:signal.value,unit:signal.unit,warning:t.warning_value,critical:t.critical_value,sustain_seconds:t.sustain_seconds}})});
   try{await rest('dev_incident_events',{method:'POST',body:JSON.stringify({incident_id:row.id,event_type:'signal_repeated',message:`${signal.label} permanece ${signal.state}.`,details:{value:signal.value,unit:signal.unit}})})}catch{}
   return updated?.[0]||row;
  }
@@ -82,6 +85,23 @@ module.exports=async function handler(req,res){
 
  // Central de Problemas (rewrite /api/problemas). Mora aqui para não criar uma
  // nova Vercel Function: o plano Hobby limita o total de Functions.
+ // Central de Incidentes (rewrite /api/incidentes): acompanhamento, sem mexer em produção.
+ if(mode==='incidents'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   try{return json(res,200,{...(await incidents.listar({dias:req.query?.dias})),podeGerenciar:hasPermission(actor,'incidents.manage'),eu:actor.id})}
+   catch(e){return json(res,503,{erro:'Não foi possível ler os incidentes agora.',codigo:'INCIDENTS_UNAVAILABLE',detalhe:e?.message||null})}
+  }
+  if(req.method==='POST'){
+   if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+   const actor=await requireSession(req,res,'incidents.manage');if(!actor)return;
+   let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   try{const r=await incidents.atualizar(actor,input);return json(res,r.status,r.body)}
+   catch(e){return json(res,500,{erro:'Não foi possível atualizar o incidente.',codigo:'INCIDENT_UPDATE_FAILED',detalhe:e?.message||null})}
+  }
+  return methodNotAllowed(res,['GET','POST']);
+ }
+
  if(mode==='problems'){
   if(req.method==='GET'){
    const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;

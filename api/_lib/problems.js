@@ -396,13 +396,15 @@ async function persistIncidents(result, observedAt) {
     const severity = p.severidade;
     const metadata = { dominio: p.dominio, tipo: p.tipo, descricao: p.descricao, impacto: p.impacto, evidencias: p.evidencias, acoes: p.acoes.map(a => a.id) };
     let existing = [];
-    try { existing = await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count&limit=1`, { method: 'GET' }); } catch { continue; }
+    try { existing = await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count,metadata&limit=1`, { method: 'GET' }); } catch { continue; }
     try {
       if (existing[0]) {
         const row = existing[0];
-        const reabriu = row.status === 'resolved' || row.status === 'mitigated';
-        if (reabriu) await rest('dev_incident_events', { method: 'POST', body: JSON.stringify({ incident_id: row.id, event_type: 'reopened', message: 'O problema voltou a ser detectado depois de mitigado.', details: { evidencias: p.evidencias } }) }).catch(() => undefined);
-        await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', body: JSON.stringify({ status: reabriu ? 'reopened' : row.status, severity, title: p.titulo, occurrence_count: Math.max(Number(row.occurrence_count || 0) + 1, p.ocorrencias || 1), last_seen_at: observedAt, metadata }) });
+        // Resolvido volta a abrir se o problema voltar; mitigado só reabre quando a mitigação foi automática.
+        const manual = row.metadata?.manual;
+        const reabriu = row.status === 'resolved' || (row.status === 'mitigated' && manual?.status !== 'mitigated');
+        if (reabriu) await rest('dev_incident_events', { method: 'POST', body: JSON.stringify({ incident_id: row.id, event_type: 'reopened', message: row.status === 'resolved' ? 'Estava marcado como resolvido e voltou a ser detectado.' : 'O problema voltou a ser detectado depois de mitigado.', details: { evidencias: p.evidencias } }) }).catch(() => undefined);
+        await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', body: JSON.stringify({ status: reabriu ? 'reopened' : row.status, ...(reabriu ? { resolved_at: null } : {}), severity, title: p.titulo, occurrence_count: Math.max(Number(row.occurrence_count || 0) + 1, p.ocorrencias || 1), last_seen_at: observedAt, metadata: { ...metadata, ...(manual ? { manual } : {}) } }) });
       } else {
         const created = await rest('dev_incidents', { method: 'POST', body: JSON.stringify({ fingerprint, title: p.titulo, module: p.dominio, severity, status: 'open', occurrence_count: p.ocorrencias || 1, affected_entities: p.alvo?.length || 0, first_seen_at: p.desde || observedAt, last_seen_at: observedAt, source: 'problems', source_reference: p.id, metadata }) });
         if (created?.[0]) await rest('dev_incident_events', { method: 'POST', body: JSON.stringify({ incident_id: created[0].id, event_type: 'opened', message: 'Central de Problemas detectou a falha.', details: { evidencias: p.evidencias } }) }).catch(() => undefined);

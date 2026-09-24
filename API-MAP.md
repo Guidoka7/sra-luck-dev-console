@@ -49,6 +49,8 @@ A autorização real do Sra Luck continua existindo do outro lado; o RBAC do Dev
 
 - `GET /api/problemas` — detecta problemas em plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações (`monitoring.view`).
   - cada problema com incidente aberto em `dev_incidents` traz `incidente: { status, desde, ultimaVez, varreduras }`; `desde` só é preenchido quando o incidente está aberto (um incidente reaberto não serve de início). A Visão Geral usa `desde` para cruzar o problema com deploys e migrations.
+- `GET /api/incidentes?dias=7` — incidentes abertos/mitigados e os atualizados no período (até 30 dias), eventos (sem `signal_repeated`), responsáveis possíveis, `podeGerenciar` e `eu` (`monitoring.view`). Mora em `api/infra-scan.js` (`mode=incidents`).
+- `POST /api/incidentes` `{ ids, acao: status|responsavel|nota, status?: investigating|mitigated|resolved, usuario?, nota? }` — muda só o acompanhamento no banco do Dev Console, até 20 incidentes por vez (um grupo), com evento e auditoria (`incidents.manage`, mesma origem).
 - `GET /api/problemas?incidente=problem:…|infra:…` — incidente registrado e seus eventos (`opened`, `signal_repeated`, `signal_recovered`, `reopened`, `fix_applied`) para a linha do tempo (`monitoring.view`).
 - `POST /api/problemas` `{ teste }` — reteste de um único teste da Central (ids de `SOURCES` em `api/_lib/problems.js`). É o mesmo GET da varredura, só leitura no Sra Luck; o resultado é gravado em `dev_metric_snapshots` como `probe` com `dimensions.manual=true` (`monitoring.view`, mesma origem).
 - `POST /api/problemas` — `{ problema, acao, params? }` aplica uma correção do registro fechado e verifica se o problema sumiu. A permissão depende da ação:

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0 — Central de Incidentes
+
+- nova página `incidentes.html` (menu: Central de Incidentes) sobre `dev_incidents`/`dev_incident_events`, sem tabela nova: histórico, status, recorrência, responsável e notas;
+- marcar investigando, mitigado ou resolvido (resolvido pede confirmação), atribuir ou assumir, adicionar nota, aplicar ao grupo inteiro; tudo com evento e auditoria, sem mexer na produção;
+- alertas relacionados agrupados (mesmo deploy suspeito, mesmo componente ou componentes dependentes, com o motivo explícito);
+- "Voltou": reaberturas contadas e destacadas; resolvido que volta reabre sozinho, e "mitigado, mas ainda detectado" aparece como exigindo ação;
+- relação de cada incidente com componente, fluxo, testes e deploys/migrations perto do início, com antes x depois;
+- estabilidade 24 h e 7 dias por componente a partir das leituras gravadas dos testes (não é uptime), com faixa dia a dia;
+- só "Exigem ação" fica aberto; acompanhamento e resolvidos ficam recolhidos;
+- varredura respeita a marcação manual: mitigado marcado por alguém não é reaberto só por continuar detectado, a marcação não é apagada pela regravação do metadata, e `resolved_at` é limpo ao reabrir;
+- mapa do sistema (componentes, fluxos, dependências, testes) e mudanças passam a ter uma definição só em `dev-console-investigacao.js`, usada pela Visão Geral e pela Central;
+- Visão Geral: "Acompanhar incidentes" e "Acompanhar" no drawer do alerta; `visao-geral.html?investigar=<chave>` abre a investigação guiada.
+
 ## 0.8.0 — Investigação guiada
 
 - checklist de diagnóstico por tipo de falha (5xx, 401/403, 404, timeout, banco, storage, recurso de infraestrutura, deploy com falha, produção desatualizada, CI, erro de tela, pendência operacional, regressão), em ordem, com cada passo marcado como verificado, confirmado, pista, "verificar você" ou sem dados;

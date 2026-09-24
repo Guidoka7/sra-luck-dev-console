@@ -70,6 +70,10 @@
       "destination": "/api/infra-scan?mode=problems"
     },
     {
+      "source": "/api/incidentes",
+      "destination": "/api/infra-scan?mode=incidents"
+    },
+    {
       "source": "/api/custom-apis",
       "destination": "/api/infra-scan?mode=custom-apis"
     },

@@ -19,6 +19,80 @@
   const PROBE_NOME = { ready: 'Prontidão da API', diagnostico: 'Diagnóstico do banco', storage: 'Storage', visaoGeral: 'Visão geral do Admin', configuracoes: 'Configurações', staff: 'Equipe', v46: 'Jornada V46', previsoes: 'Previsão de liberações', validacoes: 'Validações financeiras', financeiroResumo: 'Resumo financeiro', app: 'App da cliente', clube: 'Clube', recompensas: 'Recompensas', notificacoes: 'Notificações', vapid: 'Web Push', integracoes: 'Integrações' };
   const pontos = (serie) => (serie || []).map((p) => ({ t: Date.parse(p.observed_at), v: Number(p.metric_value), ok: p.state !== 'critical', status: p.dimensions?.status ?? null, manual: Boolean(p.dimensions?.manual) })).filter((p) => Number.isFinite(p.t)).sort((a, b) => a.t - b.t);
 
+
+  // ------------------------------------------------------------- mapa do sistema
+  // Usado pela Visão Geral e pela Central de Incidentes (uma única definição).
+  const ADMIN_AREAS = ['admin', 'v46', 'financeiro', 'clube', 'notificacoes', 'integracoes'];
+  const FLOWS = [
+    { id: 'plataforma', nome: 'Acesso e API', desc: 'Prontidão, banco, storage e registro de erros', areas: ['plataforma'] },
+    { id: 'admin', nome: 'Painel Admin', desc: 'Visão geral, configurações e equipe', areas: ['admin'] },
+    { id: 'v46', nome: 'Jornada V46', desc: 'Central da jornada e previsão de liberações', areas: ['v46'] },
+    { id: 'financeiro', nome: 'Financeiro', desc: 'Validação de comprovantes e resumo', areas: ['financeiro'] },
+    { id: 'app', nome: 'App da cliente', desc: 'Acesso, telemetria e desempenho do app', areas: ['app'] },
+    { id: 'clube', nome: 'Clube de vantagens', desc: 'Recompensas, indicações e vouchers', areas: ['clube'] },
+    { id: 'notificacoes', nome: 'Notificações', desc: 'Rotinas, templates e Web Push', areas: ['notificacoes'] },
+    { id: 'integracoes', nome: 'Integrações', desc: 'Gemini, pagamentos, CRM e bancos', areas: ['integracoes'] },
+  ];
+  // ------------------------------------------------------------- dependências
+  // Arquitetura real do sra-luck-react: App e Admin são o mesmo SPA (Vite) publicado na Vercel e
+  // chamam /api/*, que roda o código de worker/ (Edge Function da Vercel em api/[...path].ts; o mesmo
+  // Worker tem configuração Cloudflare em wrangler.jsonc). A API lê e grava no Supabase e no Storage.
+  const DEPS = { app: ['api'], admin: ['api'], api: ['supabase', 'storage'], storage: ['supabase'], supabase: [], vercel: [], cloudflare: [] };
+  const HOSPEDAGEM = { app: 'vercel', admin: 'vercel', api: 'vercel' };
+  const RELACIONADO = { api: ['cloudflare'], cloudflare: ['api'] };
+  const dependentes = (id) => Object.keys(DEPS).filter((k) => DEPS[k].includes(id));
+  function compDoProblema(p) {
+    const id = String(p.id || '');
+    if (id.startsWith('plataforma:diagnostico')) return 'supabase';
+    if (id === 'plataforma:storage') return 'storage';
+    if (p.dominio === 'plataforma') return 'api';
+    if (p.dominio === 'app') return 'app';
+    if (ADMIN_AREAS.includes(p.dominio)) return 'admin';
+    return null;
+  }
+  const FONTES_TESTE_COMP = { ready: 'api', diagnostico: 'supabase', storage: 'storage', app: 'app', visaoGeral: 'admin', configuracoes: 'admin', staff: 'admin', v46: 'admin', previsoes: 'admin', validacoes: 'admin', financeiroResumo: 'admin', clube: 'admin', recompensas: 'admin', notificacoes: 'admin', vapid: 'admin', integracoes: 'admin' };
+  const COMP_DA_INFRA = { supabase: 'supabase', backups: 'supabase', cloudflare: 'cloudflare', storage: 'storage' };
+
+  const TESTE_DA_AREA = { v46: 'v46', financeiro: 'validacoes', app: 'app', notificacoes: 'notificacoes', integracoes: 'integracoes', clube: 'clube', admin: 'visaoGeral', plataforma: 'ready' };
+  function testesDo(p) {
+    const id = String(p.id || '');
+    if (id.startsWith('funcao:')) return [id.slice(7)];
+    if (id === 'plataforma:ready') return ['ready'];
+    if (id.startsWith('plataforma:diagnostico')) return ['diagnostico'];
+    if (id === 'plataforma:storage') return ['storage'];
+    return TESTE_DA_AREA[p.dominio] ? [TESTE_DA_AREA[p.dominio]] : [];
+  }
+  const TESTE_DA_INFRA = { supabase: ['diagnostico'], backups: [], storage: ['storage'], cloudflare: ['ready'] };
+  const COMP_NOME = { app: 'App da cliente', admin: 'Admin', api: 'API / Worker', supabase: 'Supabase', storage: 'Storage', vercel: 'Vercel', cloudflare: 'Cloudflare' };
+  // Incidente registrado (dev_incidents) → componente, testes e fluxos afetados.
+  function mapaDoIncidente(inc) {
+    const fp = String(inc.fingerprint || '');
+    if (fp.startsWith('problem:')) {
+      const p = { id: fp.slice(8), dominio: inc.module };
+      return { comp: compDoProblema(p), testes: testesDo(p), fluxos: FLOWS.filter((f) => f.areas.includes(inc.module)) };
+    }
+    if (fp.startsWith('infra:')) {
+      const src = fp.split(':')[1];
+      return { comp: COMP_DA_INFRA[src] || null, testes: TESTE_DA_INFRA[src] || [], fluxos: ['supabase', 'storage', 'cloudflare'].includes(src) ? FLOWS.filter((f) => f.id === 'plataforma') : [] };
+    }
+    return { comp: null, testes: [], fluxos: [] };
+  }
+  const MAPA = { ADMIN_AREAS, FLOWS, DEPS, HOSPEDAGEM, RELACIONADO, dependentes, compDoProblema, FONTES_TESTE_COMP, COMP_DA_INFRA, TESTE_DA_AREA, testesDo, TESTE_DA_INFRA, COMP_NOME, mapaDoIncidente };
+
+  // ------------------------------------------------------------- mudanças (deploys de produção e migrations na main)
+  function mudancasDe(c) {
+    if (!c) return [];
+    const out = [];
+    for (const d of c.deploy?.recentes || []) if (d.target === 'production' && d.createdAt) out.push({ tipo: 'deploy', t: Number(d.createdAt), titulo: d.message || 'Deploy de produção', ref: (d.sha || '').slice(0, 7) || 'sem commit', estado: d.state, atual: d.current });
+    for (const m of c.migrations?.itens || []) if (m.alteradaEm) out.push({ tipo: 'migration', t: Date.parse(m.alteradaEm), titulo: m.arquivo, ref: (m.commit || '').slice(0, 7) });
+    return out.filter((x) => Number.isFinite(x.t)).sort((a, b) => b.t - a.t);
+  }
+  // Entre 6 h antes e 15 min depois do início (tolerância de relógio). Proximidade no tempo é pista, não prova.
+  function perto(lista, ancora) {
+    const t0 = Date.parse(ancora || ''); if (!Number.isFinite(t0)) return [];
+    return lista.filter((m) => m.t >= t0 - 6 * H && m.t <= t0 + 15 * 60000).map((m) => ({ ...m, delta: t0 - m.t })).sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
+  }
+
   // ------------------------------------------------------------- antes x depois
   // A janela de cada lado vai até 24 h, mas para na mudança vizinha: assim o "depois" de um deploy
   // não mistura o efeito do deploy seguinte.
@@ -214,8 +288,8 @@
       const t = Date.parse(e.created_at);
       if (e.event_type === 'signal_repeated') { if (rep) { rep.n++; rep.fim = t; } else { rep = { t, n: 1, fim: t }; ev.push(rep); rep.tipo = 'repeticao'; } continue; }
       rep = null;
-      const map = { opened: ['inicio', 'Incidente aberto'], signal_recovered: ['recuperacao', 'Recuperou (marcado como mitigado)'], reopened: ['recorrencia', 'Voltou a acontecer (reaberto)'], fix_applied: ['acao', 'Correção registrada'], autofix_applied: ['acao', 'Correção automática registrada'] }[e.event_type] || ['acao', e.event_type];
-      ev.push({ t, tipo: map[0], txt: `${map[1]}${e.message ? ` · ${e.message}` : ''}` });
+      const map = { opened: ['inicio', 'Incidente aberto'], signal_recovered: ['recuperacao', 'Recuperou (marcado como mitigado)'], reopened: ['recorrencia', 'Voltou a acontecer (reaberto)'], fix_applied: ['acao', 'Correção registrada'], autofix_applied: ['acao', 'Correção automática registrada'], status_changed: ['acao', null], assigned: ['acao', null], note: ['nota', null] }[e.event_type] || ['acao', e.event_type];
+      ev.push({ t, tipo: map[0], txt: map[1] ? `${map[1]}${e.message ? ` · ${e.message}` : ''}` : e.message || e.event_type });
     }
     for (const r of ev) if (r.tipo === 'repeticao') r.txt = `Continuou fora do normal em ${r.n} leitura(s)${r.n > 1 ? ` até ${hora(r.fim)}` : ''}`;
     for (const a of i.amostras || []) { const t = Date.parse(a.criado_em); if (Number.isFinite(t)) ev.push({ t, tipo: 'erro', txt: `Erro registrado${a.nivel ? ` (${a.nivel})` : ''}${a.ambiente ? ` · ${a.ambiente}` : ''}` }); }
@@ -231,7 +305,7 @@
     const reab = (ctx.historico?.eventos || []).filter((e) => e.event_type === 'reopened' && Date.parse(e.created_at) >= desde).length;
     return { episodios: eps.length, reaberturas: reab, texto: eps.length > 1 || reab ? `${eps.length > 1 ? `${eps.length} episódios de falha` : ''}${eps.length > 1 && reab ? ' e ' : ''}${reab ? `${reab} reabertura(s)` : ''} em 7 dias` : null };
   }
-  const TL_ICON = { deploy: 'rocket', migration: 'database', erro: 'circle-x', recuperacao: 'circle-check', recorrencia: 'repeat', inicio: 'flag', ultima: 'clock', repeticao: 'more-horizontal', acao: 'wrench' };
+  const TL_ICON = { nota: 'message-square', deploy: 'rocket', migration: 'database', erro: 'circle-x', recuperacao: 'circle-check', recorrencia: 'repeat', inicio: 'flag', ultima: 'clock', repeticao: 'more-horizontal', acao: 'wrench' };
   function linhaDoTempoHtml(ev) {
     return ev.length ? `<ol class="dc-ov-tl">${ev.map((e) => `<li class="${e.tipo}${e.suspeita ? ' perto' : ''}"><time>${esc(hora(e.t))}</time><span><i data-lucide="${TL_ICON[e.tipo] || 'dot'}"></i>${esc(e.txt)}</span>${e.suspeita ? DC.chip('suspeita', 'warn') : e.reteste ? DC.chip('agora', 'info') : ''}</li>`).join('')}</ol>` : '<div class="dc-empty">Sem eventos registrados para este incidente.</div>';
   }
@@ -259,5 +333,5 @@
     return L.join('\n\n');
   }
 
-  window.DCInvest = { PROBES, PROBE_NOME, pontos, janela, compararTeste, compararErros, compararMudanca, tabelaComparacao, VEREDITO, episodios, recorrencia, tipoFalha, passos, checklistHtml, linhaDoTempo, linhaDoTempoHtml, relatorio };
+  window.DCInvest = { MAPA, mudancasDe, perto, dur, PROBES, PROBE_NOME, pontos, janela, compararTeste, compararErros, compararMudanca, tabelaComparacao, VEREDITO, episodios, recorrencia, tipoFalha, passos, checklistHtml, linhaDoTempo, linhaDoTempoHtml, relatorio };
 })();
