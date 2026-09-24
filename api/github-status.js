@@ -1,37 +1,38 @@
 const { json, body, methodNotAllowed, requestId, sameOrigin } = require('./_lib/http');
 const { requireSession, hasPermission } = require('./_lib/rbac');
 const { audit } = require('./_lib/supabase');
+const { getSecret } = require('./_lib/secrets');
 
 // Engenharia: GitHub (PRs, CI, commits) e Vercel (deploys) dos dois projetos.
 // Leitura: code.view. Ações (re-rodar CI, merge, criar PR, disparar workflow,
 // redeploy/promover): releases.manage, sempre auditadas. Só os dois repos e
 // os dois projetos configurados podem ser tocados.
 
-const REPOS = () => ({
-  sra: String(process.env.GITHUB_REPOSITORY || 'Guidoka7/sra-luck-react'),
-  console: String(process.env.GITHUB_CONSOLE_REPOSITORY || 'Guidoka7/sra-luck-dev-console'),
+const REPOS = async () => ({
+  sra: String((await getSecret('GITHUB_REPOSITORY')) || 'Guidoka7/sra-luck-react'),
+  console: String((await getSecret('GITHUB_CONSOLE_REPOSITORY')) || 'Guidoka7/sra-luck-dev-console'),
 });
-const PROJECTS = () => ({
-  sra: String(process.env.SRA_VERCEL_PROJECT_ID || '').trim(),
-  console: String(process.env.DEV_VERCEL_PROJECT_ID || process.env.VERCEL_PROJECT_ID || '').trim(),
+const PROJECTS = async () => ({
+  sra: String((await getSecret('SRA_VERCEL_PROJECT_ID')) || '').trim(),
+  console: String(process.env.VERCEL_PROJECT_ID || (await getSecret('DEV_VERCEL_PROJECT_ID')) || '').trim(),
 });
 
-function ghHeaders() {
-  const token = String(process.env.GITHUB_TOKEN || '').trim();
+async function ghHeaders() {
+  const token = String((await getSecret('GITHUB_TOKEN')) || '').trim();
   const h = { Accept: 'application/vnd.github+json', 'User-Agent': 'sra-luck-dev-console', 'X-GitHub-Api-Version': '2022-11-28' };
   if (token) h.Authorization = `Bearer ${token}`;
   return h;
 }
 async function github(repo, path, init = {}) {
-  const r = await fetch(`https://api.github.com/repos/${repo}${path}`, { ...init, headers: { ...ghHeaders(), ...(init.body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store' });
+  const r = await fetch(`https://api.github.com/repos/${repo}${path}`, { ...init, headers: { ...(await ghHeaders()), ...(init.body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store' });
   const data = r.status === 204 ? {} : await r.json().catch(() => ({}));
   if (!r.ok) { const e = new Error(data?.message || `GitHub HTTP ${r.status}`); e.status = r.status; throw e; }
   return data;
 }
 async function vercel(path, init = {}) {
-  const token = String(process.env.DEV_VERCEL_ACCESS_TOKEN || '').trim();
+  const token = String((await getSecret('DEV_VERCEL_ACCESS_TOKEN')) || '').trim();
   if (!token) { const e = new Error('Configure DEV_VERCEL_ACCESS_TOKEN para ver e operar os deploys.'); e.status = 503; throw e; }
-  const team = String(process.env.DEV_VERCEL_TEAM_ID || '').trim();
+  const team = String((await getSecret('DEV_VERCEL_TEAM_ID')) || '').trim();
   const url = `https://api.vercel.com${path}${team ? `${path.includes('?') ? '&' : '?'}teamId=${encodeURIComponent(team)}` : ''}`;
   const r = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store' });
   const data = await r.json().catch(() => ({}));
@@ -83,10 +84,10 @@ async function deployments(projectId) {
 }
 
 async function overview() {
-  const repos = REPOS(), projects = PROJECTS();
+  const repos = await REPOS(), projects = await PROJECTS();
   const settle = (p) => p.then((v) => ({ ok: true, ...v })).catch((e) => ({ ok: false, erro: e.message, status: e.status || null }));
   const [sra, dc, vsra, vdc] = await Promise.all([settle(repoSummary(repos.sra)), settle(repoSummary(repos.console)), settle(deployments(projects.sra)), settle(deployments(projects.console))]);
-  return { ok: true, geradoEm: new Date().toISOString(), tokens: { github: Boolean(process.env.GITHUB_TOKEN), vercel: Boolean(process.env.DEV_VERCEL_ACCESS_TOKEN) }, repos: { sra, console: dc }, deploys: { sra: vsra, console: vdc } };
+  return { ok: true, geradoEm: new Date().toISOString(), tokens: { github: Boolean(await getSecret('GITHUB_TOKEN')), vercel: Boolean(await getSecret('DEV_VERCEL_ACCESS_TOKEN')) }, repos: { sra, console: dc }, deploys: { sra: vsra, console: vdc } };
 }
 
 /**
@@ -95,7 +96,7 @@ async function overview() {
  * roda o mesmo código da main. Só afirma sincronia quando há os dois SHAs.
  */
 async function changes() {
-  const repos = REPOS(), projects = PROJECTS();
+  const repos = await REPOS(), projects = await PROJECTS();
   const settle = (p) => p.then((v) => ({ ok: true, v })).catch((e) => ({ ok: false, erro: e.message, status: e.status || null }));
   const [commitsR, runsR, dirR, depR] = await Promise.all([
     settle(github(repos.sra, '/commits?sha=main&per_page=10')),
@@ -147,7 +148,7 @@ async function legacySummary(repo) {
 }
 
 async function action(actor, input) {
-  const repos = REPOS(), projects = PROJECTS();
+  const repos = await REPOS(), projects = await PROJECTS();
   const which = input?.repo === 'console' ? 'console' : 'sra';
   const repo = repos[which];
   const name = String(input?.action || '');
@@ -218,17 +219,17 @@ module.exports = async function handler(req, res) {
     if (resource === 'overview') return json(res, 200, { ...(await overview()), podeOperar: hasPermission(actor, 'releases.manage') });
     if (resource === 'changes') return json(res, 200, await changes());
     if (resource === 'branches') {
-      const repo = REPOS()[req.query?.repo === 'console' ? 'console' : 'sra'];
+      const repo = (await REPOS())[req.query?.repo === 'console' ? 'console' : 'sra'];
       const data = await github(repo, '/branches?per_page=100');
       return json(res, 200, { ok: true, branches: (Array.isArray(data) ? data : []).map((b) => b.name) });
     }
     if (resource === 'workflows') {
-      const repo = REPOS()[req.query?.repo === 'console' ? 'console' : 'sra'];
+      const repo = (await REPOS())[req.query?.repo === 'console' ? 'console' : 'sra'];
       const data = await github(repo, '/actions/workflows?per_page=50');
       return json(res, 200, { ok: true, workflows: (data.workflows || []).map((w) => ({ id: w.id, name: w.name, path: w.path, file: String(w.path || '').split('/').pop(), state: w.state })) });
     }
     if (resource !== 'summary') return json(res, 400, { erro: 'Recurso inválido.' });
-    return json(res, 200, await legacySummary(REPOS().sra));
+    return json(res, 200, await legacySummary((await REPOS()).sra));
   } catch (error) {
     return json(res, error?.status || 502, { ok: false, erro: error?.message || 'Não foi possível consultar o GitHub.' });
   }
