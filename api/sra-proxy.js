@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { json, rawBody, methodNotAllowed, requestId } = require('./_lib/http');
 const { requireSession } = require('./_lib/rbac');
 const { audit } = require('./_lib/supabase');
+const { getSecret } = require('./_lib/secrets');
 
 function permissionFor(path,method){
  const read=method==='GET'||method==='HEAD';
@@ -28,7 +29,7 @@ module.exports=async function handler(req,res){
  if(!['GET','HEAD','POST','PATCH','PUT','DELETE'].includes(req.method))return methodNotAllowed(res,['GET','HEAD','POST','PATCH','PUT','DELETE']);
  const path=safePath(req.query?.path);if(!path)return json(res,400,{erro:'Endpoint de destino inválido.',codigo:'SRA_PROXY_PATH_INVALID'});
  const actor=await requireSession(req,res,permissionFor(path,req.method));if(!actor)return;
- const base=String(process.env.SRA_LUCK_BASE_URL||'https://sra-luck-react.vercel.app').replace(/\/$/,'');const token=String(process.env.SRA_LUCK_SERVICE_TOKEN||'');
+ const [baseRaw,tokenRaw]=await Promise.all([getSecret('SRA_LUCK_BASE_URL'),getSecret('SRA_LUCK_SERVICE_TOKEN')]);const base=String(baseRaw||'https://sra-luck-react.vercel.app').replace(/\/$/,'');const token=String(tokenRaw||'');
  const publicProbe=path==='/api/health'||path==='/api/ready';
  if(!publicProbe&&!token)return json(res,503,{erro:'Conector server-to-server com o Sra Luck ainda não está configurado.',codigo:'SRA_CONNECTOR_NOT_CONFIGURED'});
  const rid=requestId(req);res.setHeader('x-request-id',rid);
