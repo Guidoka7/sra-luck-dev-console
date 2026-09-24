@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1 — Deploy Cloudflare
+
+- `wrangler.jsonc`: publica só `dist/` (antes, sem configuração, o Wrangler usava a raiz e tentava enviar `node_modules`, falhando com "Asset too large");
+- `scripts/build-static.mjs` monta `dist/` com as páginas e `assets/`, gera `_headers` a partir do `vercel.json` e `_redirects` para `/`; o Wrangler roda o build sozinho;
+- `.assetsignore` como rede de segurança; `dist/` e `.wrangler/` no `.gitignore`; arquivos do Cloudflare fora do deploy da Vercel;
+- nada muda na Vercel nem no funcionamento do console.
+
 ## 0.9.0 — Central de Incidentes
 
 - nova página `incidentes.html` (menu: Central de Incidentes) sobre `dev_incidents`/`dev_incident_events`, sem tabela nova: histórico, status, recorrência, responsável e notas;

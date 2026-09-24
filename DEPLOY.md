@@ -67,3 +67,13 @@ Não usar:
 - mutações enviadas ao Sra Luck são auditadas no Supabase do Dev Console;
 - o proxy não aceita destinos fora de `/api/*`;
 - permissões do Dev Console são aplicadas antes do proxy.
+
+## Cloudflare Workers (cópia estática opcional)
+
+O Worker `sra-luck-dev-console` publica **somente** `dist/`, montado por `scripts/build-static.mjs` (páginas `*.html` da raiz + `assets/`, mais `_headers` gerado a partir dos cabeçalhos do `vercel.json` e `_redirects` para `/` → `index.html`).
+
+- `wrangler.jsonc` roda o build sozinho (`build.command`) antes do `wrangler deploy`; não é preciso comando de build no painel.
+- A raiz do repositório nunca é enviada: `node_modules`, `.git`, `.github`, `.vercel`, `api/`, `supabase/`, `docs/` e arquivos internos ficam fora. `.assetsignore` na raiz é só rede de segurança caso alguém aponte a pasta de assets para a raiz.
+- Este Worker não executa código: as Functions de `api/` (login, proxy, varreduras) continuam na Vercel. Sem uma rota para essas Functions, as páginas servidas pelo Cloudflare abrem, mas não autenticam nem carregam dados.
+- Teste local: `npx wrangler deploy --dry-run` (monta `dist/` e lista o upload) ou `npx wrangler dev`.
+
