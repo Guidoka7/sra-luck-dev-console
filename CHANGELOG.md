@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0 — CRM e Conta Azul nas Integrações
+
+- formulário de cada função gerado pela descrição de campos do catálogo do Sra Luck (seleção, múltipla escolha, mapeamento, grupo de opções), com listas lidas do provedor na hora (funis, etapas e campos do RD; contas financeiras e categorias da Conta Azul);
+- RD Station: configurar funil, etapas, status, campos importados e mapeamento, deduplicação por CPF/telefone/e-mail e importação automática; aba Importações com histórico, itens de cada importação (dados mascarados), duplicidades aguardando revisão e "Importar agora";
+- Conta Azul: aba Operação só leitura (conexão, vínculos, conflitos em revisão, fila e execuções); configuração exibida bloqueada, alterável só no Admin;
+- "Sincronizar RD" passa a usar a importação configurável (`/rd-station/importar`).
+
 ## 0.10.0 — Padrão de integrações
 
 - o drawer de cada integração passa a ser montado a partir do catálogo do Sra Luck (`GET /api/admin/integrations/catalogo`), com as abas Visão (credenciais mascaradas, status, teste de conexão), Funções, Dados e mapeamento, Sincronização, Webhooks, Histórico e Regras e limites; integração nova entra no registro do Sra Luck, sem mudar o Dev Console;

@@ -1,9 +1,10 @@
 (() => {
   // Padrão de integração no Dev Console. Monta as abas a partir do catálogo do Sra Luck
   // (GET /api/admin/integrations/catalogo): credenciais mascaradas, funções com situação real,
-  // origem/destino, mapeamento, sincronização, webhooks, histórico e regras. A única escrita
-  // é a configuração não secreta de funções (POST /api/admin/integrations/config); segredos
-  // continuam no cofre do Admin.
+  // origem/destino, mapeamento, sincronização, webhooks, histórico e regras. O formulário de
+  // cada função é gerado pela descrição de campos do catálogo.
+  // Escritas daqui: configuração não secreta (Gemini e importação do CRM) e "Importar agora"
+  // do CRM. Conta Azul é só leitura: ações financeiras e segredos ficam no Admin do Sra Luck.
   const esc = (v) => DC.esc(v == null ? '' : String(v));
   const SITUACAO = { disponivel: ['Disponível', 'ok'], api_permite: ['API permite · não implementado', 'warn'], api_nao_permite: ['API não permite', 'neutral'] };
   const DIRECAO = { entrada: 'Entrada', saida: 'Saída', bidirecional: 'Bidirecional', interna: 'Interna' };
@@ -12,7 +13,10 @@
     mensagem_diaria: ['Instruções de estilo', 'Substitui as instruções de estilo padrão da mensagem diária. Em branco, usa o padrão.'],
     notificacoes: ['Orientação extra de tom', 'Somada às regras fixas de segurança (sem CPF, sem inventar valores). Não substitui essas regras.'],
   };
-  const S = { catalogo: null, erro: null, aba: null };
+  // Mesma lista da guarda M2M do Sra Luck (worker/dev-console-auth.ts).
+  const EDITAVEL_AQUI = new Set(['gemini.mensagem_diaria', 'gemini.notificacoes', 'rd_station.importacao']);
+  const OPCOES_URL = { rd_station: '/api/admin/integrations/rd-station/opcoes', conta_azul: '/api/admin/integrations/conta-azul/opcoes' };
+  const S = { catalogo: null, erro: null, aba: null, opcoes: {} };
 
   async function carregar() {
     const r = await DC.api('/api/admin/integrations/catalogo');
@@ -22,56 +26,175 @@
   }
   const integracao = (id) => (S.catalogo?.integracoes || []).find((i) => i.id === id) || null;
   const podeConfigurar = () => ['owner', 'developer'].includes(String(DC.currentUser?.role || '').toLowerCase());
+  const chip = (s) => DC.chip(...(SITUACAO[s] || [s, 'neutral']));
+  const quando = (v) => (v ? DC.dateTimeFmt.format(new Date(v)) : '—');
 
-  const chipSit = (s) => DC.chip(...(SITUACAO[s] || [s, 'neutral']));
+  // ------------------------------------------------------------------ formulário genérico
 
-  function abaFuncoes(i) {
-    return i.funcoes.map((f) => `<article class="dc-ip-fn ${f.situacao}">
-      <header><strong>${esc(f.nome)}</strong>${chipSit(f.situacao)}${DC.chip(DIRECAO[f.direcao] || f.direcao, 'neutral')}</header>
-      <p>${esc(f.descricao)}</p>
-      ${f.motivo ? `<p class="dc-ip-motivo">${esc(f.motivo)}</p>` : ''}
-      ${f.config ? formConfig(i, f) : ''}
-    </article>`).join('');
+  async function opcoesDe(provedor) {
+    if (!OPCOES_URL[provedor]) return null;
+    if (S.opcoes[provedor]) return S.opcoes[provedor];
+    const r = await DC.api(OPCOES_URL[provedor], { timeout: 30000 });
+    S.opcoes[provedor] = r.ok ? r.data : { erro: r.error || 'Lista do provedor indisponível.' };
+    return S.opcoes[provedor];
   }
 
-  function formConfig(i, f) {
-    const c = f.config, dis = podeConfigurar() ? '' : ' disabled', [pl, ph] = PROMPT_LABEL[f.id] || ['Prompt', ''];
-    const uso = c.limiteDiario ? `${f.usoHoje}/${c.limiteDiario} chamadas hoje` : `${f.usoHoje} chamada(s) hoje · sem limite`;
+  function lista(campo, op, valores) {
+    if (campo.opcoes) return campo.opcoes;
+    if (!op || op.erro) return [];
+    if (campo.opcoesDe === 'rd_funis') return (op.funis || []).map((f) => ({ valor: f.id, rotulo: f.nome }));
+    if (campo.opcoesDe === 'rd_etapas') return ((op.funis || []).find((f) => f.id === valores.pipelineId)?.etapas || []).map((e) => ({ valor: e.id, rotulo: e.nome }));
+    if (campo.opcoesDe === 'rd_campos') return [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }, ...(op.campos || []).map((c) => ({ valor: `${c.entidade}:${c.slug}`, rotulo: `${c.entidade === 'deal' ? 'Negociação' : 'Contato'}: ${c.nome}` }))];
+    if (campo.opcoesDe === 'ca_contas') return (op.contas || []).map((c) => ({ valor: c.id, rotulo: c.nome }));
+    if (campo.opcoesDe === 'ca_categorias') return (op.categorias || []).map((c) => ({ valor: c.id, rotulo: c.nome }));
+    return [];
+  }
+
+  const opcoesHtml = (itens, atual, vazio = true) => {
+    const l = itens.some((o) => String(o.valor) === String(atual)) || atual == null || atual === '' ? itens : [...itens, { valor: atual, rotulo: atual }];
+    return `${vazio ? '<option value="">—</option>' : ''}${l.map((o) => `<option value="${esc(o.valor)}"${String(o.valor) === String(atual ?? '') ? ' selected' : ''}>${esc(o.rotulo)}</option>`).join('')}`;
+  };
+
+  function campoHtml(f, campo, valores, op, dis) {
+    const v = valores[campo.chave];
+    let [rot, ajuda] = [campo.rotulo, campo.ajuda || ''];
+    if (campo.chave === 'prompt' && PROMPT_LABEL[f.id]) [rot, ajuda] = PROMPT_LABEL[f.id];
+    const aj = ajuda ? `<small>${esc(ajuda)}</small>` : '';
+    switch (campo.tipo) {
+      case 'booleano': return `<label class="dc-ip-toggle dc-ip-full"><span class="dc-switch"><input type="checkbox" data-c="${esc(campo.chave)}" data-t="booleano"${v ? ' checked' : ''}${dis}/><span></span></span><b>${esc(rot)}</b>${aj}</label>`;
+      case 'numero': return `<label>${esc(rot)}<input type="number" data-c="${esc(campo.chave)}" data-t="numero" min="${campo.min ?? ''}" max="${campo.max ?? ''}" step="${campo.passo ?? 'any'}" value="${v ?? ''}" placeholder="${esc(campo.placeholder || '')}"${dis}/></label>`;
+      case 'texto': return `<label>${esc(rot)}<input data-c="${esc(campo.chave)}" data-t="texto" maxlength="${campo.maxLength || 200}" value="${esc(v || '')}" placeholder="${esc(campo.placeholder || '')}"${dis}/></label>`;
+      case 'texto_longo': return `<label class="dc-ip-full">${esc(rot)}<textarea data-c="${esc(campo.chave)}" data-t="texto" maxlength="${campo.maxLength || 1500}" rows="3" placeholder="${esc(ajuda)}"${dis}>${esc(v || '')}</textarea>${aj}</label>`;
+      case 'selecao': return `<label>${esc(rot)}<select data-c="${esc(campo.chave)}" data-t="selecao"${dis}>${opcoesHtml(lista(campo, op, valores), v, !campo.opcoes)}</select>${aj}</label>`;
+      case 'multi_selecao': {
+        const itens = lista(campo, op, valores), marcados = Array.isArray(v) ? v : [];
+        return `<div class="dc-ip-full" data-multi="${esc(campo.chave)}"><span>${esc(rot)}</span><div class="dc-ip-checks">${itens.length ? itens.map((o) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-t="multi" value="${esc(o.valor)}"${marcados.includes(o.valor) ? ' checked' : ''}${dis}/>${esc(o.rotulo)}</label>`).join('') : `<small>${valores.pipelineId ? 'Sem etapas neste funil.' : 'Escolha o funil primeiro.'}</small>`}</div>${aj}</div>`;
+      }
+      case 'mapeamento': {
+        const fontes = lista(campo, op, valores);
+        return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-map">${(campo.itens || []).map((it) => `<span>${esc(it.rotulo)}</span><select data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="mapa"${dis}>${opcoesHtml(fontes.length ? fontes : [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }], v?.[it.chave] ?? 'auto', false)}</select>`).join('')}</div>${aj}</div>`;
+      }
+      case 'grupo_booleano': return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div>${aj}</div>`;
+      default: return '';
+    }
+  }
+
+  function formHtml(i, f, op) {
+    const chave = `${i.id}.${f.id}`, editavelAqui = EDITAVEL_AQUI.has(chave), pode = editavelAqui && podeConfigurar(), dis = pode ? '' : ' disabled';
+    const c = f.config || {}, campos = f.campos || [];
+    const uso = campos.some((x) => x.chave === 'limiteDiario') ? (c.limiteDiario ? `${f.usoHoje}/${c.limiteDiario} chamadas hoje` : `${f.usoHoje} chamada(s) hoje · sem limite`) : '';
+    const rodape = !editavelAqui ? '<small class="dc-muted">Configuração financeira: altere no Admin do Sra Luck → Integrações.</small>'
+      : pode ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Só owner/developer podem alterar.</small>';
     return `<form class="dc-ip-form" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
-      <label class="dc-ip-toggle"><span class="dc-switch"><input type="checkbox" name="ativo"${c.ativo ? ' checked' : ''}${dis}/><span></span></span><b>${c.ativo ? 'Função ligada' : 'Função desligada'}</b><small>${esc(uso)}</small></label>
-      <div class="dc-ip-grid">
-        <label>Modelo<input name="modelo" value="${esc(c.modelo || '')}" placeholder="em branco = modelo geral" maxlength="80"${dis}/></label>
-        <label>Temperatura<input name="temperatura" type="number" min="0" max="2" step="0.1" value="${c.temperatura ?? ''}" placeholder="padrão"${dis}/></label>
-        <label>Máx. tokens<input name="maxTokens" type="number" min="64" max="8192" step="1" value="${c.maxTokens ?? ''}" placeholder="padrão"${dis}/></label>
-        <label>Limite diário<input name="limiteDiario" type="number" min="1" max="1000" step="1" value="${c.limiteDiario ?? ''}" placeholder="sem limite"${dis}/></label>
-      </div>
-      <label class="dc-ip-full">${esc(pl)}<textarea name="prompt" maxlength="1500" rows="3" placeholder="${esc(ph)}"${dis}>${esc(c.prompt || '')}</textarea><small>${esc(ph)}</small></label>
-      <footer><small class="dc-muted">${f.versao ? `Versão ${f.versao} · ${f.atualizadoEm ? DC.relTime(f.atualizadoEm) : ''}` : 'Sem configuração salva: valem os padrões do sistema.'}</small>${podeConfigurar() ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Só owner/developer podem alterar.</small>'}</footer>
+      ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)}</div>` : ''}
+      ${uso ? `<small class="dc-muted">${esc(uso)}</small>` : ''}
+      <div class="dc-ip-grid">${campos.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</div>
+      <footer><small class="dc-muted">${f.versao ? `Versão ${f.versao} · ${f.atualizadoEm ? DC.relTime(f.atualizadoEm) : ''}` : 'Sem configuração salva: valem os padrões do sistema.'}</small>${rodape}</footer>
     </form>`;
   }
 
+  function lerFormulario(form, f) {
+    const cfg = {};
+    const numericas = new Set((f.campos || []).filter((c) => c.tipo === 'selecao' && c.opcoes?.every((o) => /^\d+$/.test(o.valor))).map((c) => c.chave));
+    form.querySelectorAll('[data-c]').forEach((el) => {
+      const k = el.dataset.c, t = el.dataset.t;
+      if (t === 'booleano') cfg[k] = el.checked;
+      else if (t === 'numero') cfg[k] = el.value === '' ? null : Number(el.value);
+      else if (t === 'texto') cfg[k] = el.value.trim() || null;
+      else if (t === 'selecao') cfg[k] = el.value === '' ? null : numericas.has(k) ? Number(el.value) : el.value;
+      else if (t === 'multi') { cfg[k] = cfg[k] || []; if (el.checked) cfg[k].push(el.value); }
+      else if (t === 'mapa') { cfg[k] = cfg[k] || {}; cfg[k][el.dataset.sub] = el.value; }
+      else if (t === 'grupo') { cfg[k] = cfg[k] || {}; cfg[k][el.dataset.sub] = el.checked; }
+    });
+    (f.campos || []).filter((c) => c.tipo === 'multi_selecao').forEach((c) => { if (!(c.chave in cfg)) cfg[c.chave] = []; });
+    return cfg;
+  }
+
+  function abaFuncoes(i) {
+    return i.funcoes.map((f) => `<article class="dc-ip-fn ${f.situacao}">
+      <header><strong>${esc(f.nome)}</strong>${chip(f.situacao)}${DC.chip(DIRECAO[f.direcao] || f.direcao, 'neutral')}</header>
+      <p>${esc(f.descricao)}</p>
+      ${f.motivo ? `<p class="dc-ip-motivo">${esc(f.motivo)}</p>` : ''}
+      ${f.config ? `<div data-form="${esc(f.id)}"><div class="dc-muted" style="margin-top:8px">Carregando configuração…</div></div>` : ''}
+    </article>`).join('');
+  }
+
+  async function preencherFormularios(ov, i) {
+    const precisa = i.funcoes.some((f) => (f.campos || []).some((c) => c.opcoesDe));
+    const op = precisa ? await opcoesDe(i.id) : null;
+    i.funcoes.filter((f) => f.config).forEach((f) => {
+      const alvo = ov.querySelector(`[data-form="${CSS.escape(f.id)}"]`);
+      if (alvo) alvo.innerHTML = formHtml(i, f, op);
+    });
+  }
+
+  // ------------------------------------------------------------------ demais abas
+
   const abaDados = (i) => `<h3 class="dc-nc-h">Origem e destino por função</h3>
-    <div class="dc-table-wrap"><table class="dc-compact-table"><thead><tr><th>Função</th><th>Origem</th><th>Destino</th><th>Situação</th></tr></thead><tbody>${i.funcoes.map((f) => `<tr><td>${esc(f.nome)}</td><td>${esc(f.origem)}</td><td>${esc(f.destino)}</td><td>${chipSit(f.situacao)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="dc-table-wrap"><table class="dc-compact-table"><thead><tr><th>Função</th><th>Origem</th><th>Destino</th><th>Situação</th></tr></thead><tbody>${i.funcoes.map((f) => `<tr><td>${esc(f.nome)}</td><td>${esc(f.origem)}</td><td>${esc(f.destino)}</td><td>${chip(f.situacao)}</td></tr>`).join('')}</tbody></table></div>
     <h3 class="dc-nc-h">Mapeamento de campos</h3>${i.mapeamento.length ? `<div class="dc-table-wrap"><table class="dc-compact-table"><thead><tr><th>Origem</th><th>Destino</th><th>Observação</th></tr></thead><tbody>${i.mapeamento.map((m) => `<tr><td class="dc-mono">${esc(m.origem)}</td><td class="dc-mono">${esc(m.destino)}</td><td>${esc(m.observacao || '')}</td></tr>`).join('')}</tbody></table></div>` : '<div class="dc-empty">Sem mapeamento de campos nesta integração.</div>'}`;
 
-  const abaSync = (i) => `<div class="dc-ip-list">${i.sincronizacao.map((m) => `<div class="dc-ip-row"><b>${esc(MODO[m.modo] || m.modo)}</b><span>${esc(m.descricao)}${m.motivo ? `<small>${esc(m.motivo)}</small>` : ''}</span>${chipSit(m.situacao)}</div>`).join('') || '<div class="dc-empty">Sem modos de sincronização.</div>'}</div>`;
+  const abaSync = (i) => `<div class="dc-ip-list">${i.sincronizacao.map((m) => `<div class="dc-ip-row"><b>${esc(MODO[m.modo] || m.modo)}</b><span>${esc(m.descricao)}${m.motivo ? `<small>${esc(m.motivo)}</small>` : ''}</span>${chip(m.situacao)}</div>`).join('') || '<div class="dc-empty">Sem modos de sincronização.</div>'}</div>`;
 
-  const abaWebhooks = (i) => `<div class="dc-ip-list">${i.webhooks.map((w) => `<div class="dc-ip-row"><b>${w.direcao === 'entrada' ? 'Entrada' : 'Saída'}</b><span>${esc(w.descricao)}${w.caminho ? `<code>${esc(w.caminho)}</code>` : ''}${w.eventos.length ? `<small>Eventos: ${esc(w.eventos.join(', '))}</small>` : ''}<small>Autenticação: ${esc(w.autenticacao)}</small>${w.motivo ? `<small>${esc(w.motivo)}</small>` : ''}</span>${chipSit(w.situacao)}</div>`).join('') || '<div class="dc-empty">Esta integração não usa webhooks.</div>'}</div>`;
+  const abaWebhooks = (i) => `<div class="dc-ip-list">${i.webhooks.map((w) => `<div class="dc-ip-row"><b>${w.direcao === 'entrada' ? 'Entrada' : 'Saída'}</b><span>${esc(w.descricao)}${w.caminho ? `<code>${esc(w.caminho)}</code>` : ''}${w.eventos.length ? `<small>Eventos: ${esc(w.eventos.join(', '))}</small>` : ''}<small>Autenticação: ${esc(w.autenticacao)}</small>${w.motivo ? `<small>${esc(w.motivo)}</small>` : ''}</span>${chip(w.situacao)}</div>`).join('') || '<div class="dc-empty">Esta integração não usa webhooks.</div>'}</div>`;
 
   const abaRegras = (i) => `<h3 class="dc-nc-h">Autenticação</h3><p class="dc-ov-p">${esc(i.autenticacao)}</p>
     ${i.limites.length ? `<h3 class="dc-nc-h">Limites</h3><ul class="dc-ip-ul">${i.limites.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
     ${i.regras.length ? `<h3 class="dc-nc-h">Regras que não mudam</h3><ul class="dc-ip-ul">${i.regras.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
     <p class="dc-ov-p dc-muted">Documentação do provedor: <a href="${esc(i.documentacao)}" target="_blank" rel="noopener">${esc(i.documentacao)}</a></p>`;
 
+  // CRM: importações, revisão e "Importar agora".
+  const RESULTADO = { criada: ['Aguardando cadastro', 'ok'], atualizada: ['Snapshot atualizado', 'neutral'], duplicada: ['Duplicada', 'warn'], cliente_existente: ['Cliente já existe', 'warn'], ignorada: ['Ignorada', 'neutral'], erro: ['Erro', 'bad'], importada_apos_revisao: ['Importada após revisão', 'info'] };
+  const itemHtml = (it) => `<div class="dc-ip-row"><b>${esc(it.dados?.nome || it.externalId)}</b><span>${esc([it.dados?.cpf, it.dados?.telefone, it.dados?.email].filter(Boolean).join(' · ') || 'Sem contato')}${it.motivo ? `<small>${esc(it.motivo)}</small>` : ''}${(it.correspondencias || []).map((c) => `<small>↳ ${c.tipo === 'cliente' ? 'Cliente' : 'Venda pendente'} ${esc(c.nome || c.id)} (mesmo ${esc(c.por.join(', '))})</small>`).join('')}</span>${DC.chip(...(RESULTADO[it.resultado] || [it.resultado, 'neutral']))}</div>`;
+
+  async function abaCrm(alvo) {
+    const [imps, rev] = await Promise.all([DC.api('/api/admin/integrations/rd-station/importacoes'), DC.api('/api/admin/integrations/rd-station/importacoes/revisao')]);
+    if (!imps.ok) { alvo.innerHTML = `<div class="dc-warn-box">${esc(imps.error || 'Histórico indisponível.')}</div>`; return; }
+    const lista = imps.data.importacoes || [], revisao = rev.ok ? rev.data.itens || [] : [];
+    alvo.innerHTML = `<div class="dc-note">Toda cliente nova entra em <b>Aguardando cadastro</b>; a importação nunca cria cliente nem encaminha ao Financeiro. A venda só avança com parcelas cadastradas e acesso ao app liberado. Duplicidades (CPF, telefone, e-mail) não viram venda: são revisadas no Admin.</div>
+      <div style="display:flex;justify-content:flex-end;margin:8px 0">${podeConfigurar() ? '<button class="dc-btn primary" data-importar>Importar agora</button>' : '<small class="dc-muted">Importar agora: owner/developer.</small>'}</div>
+      ${!imps.data.disponivel ? '<div class="dc-warn-box">Estrutura de histórico ainda não aplicada no Sra Luck (migration_091).</div>' : ''}
+      ${revisao.length ? `<h3 class="dc-nc-h">Aguardando revisão no Admin (${revisao.length})</h3><div class="dc-ip-list">${revisao.map(itemHtml).join('')}</div>` : ''}
+      <h3 class="dc-nc-h">Histórico de importações</h3>
+      <div class="dc-ip-list">${lista.map((i) => `<button type="button" class="dc-ip-row dc-ip-click" data-imp="${esc(i.id)}"><b>${esc(quando(i.iniciado_em))}</b><span>${esc(i.origem)} · ${i.totais?.totalRd ?? 0} lida(s) · ${i.totais?.criadas ?? 0} nova(s) · ${(i.totais?.duplicadas ?? 0) + (i.totais?.clienteExistente ?? 0)} duplicidade(s)${i.erro ? `<small>${esc(i.erro)}</small>` : ''}${i.filtro ? `<small class="dc-mono">${esc(i.filtro)}</small>` : ''}</span>${DC.chip(i.status, i.status === 'concluida' ? 'ok' : i.status === 'erro' ? 'bad' : 'warn')}</button><div data-itens="${esc(i.id)}" hidden></div>`).join('') || '<div class="dc-empty">Nenhuma importação registrada.</div>'}</div>`;
+  }
+
+  // Conta Azul: leitura da operação.
+  const CONFLITO = { baixa_na_conta_azul: 'Baixa na Conta Azul', alterada_na_conta_azul: 'Alterada na Conta Azul', alterada_nos_dois_lados: 'Alterada nos dois lados', baixa_removida_na_conta_azul: 'Baixa removida na Conta Azul', estorno_de_baixa_externa: 'Estorno de baixa externa', recebido_parcial: 'Recebido parcial', ca_cancelado: 'Cancelada na Conta Azul', ca_renegociado: 'Renegociada na Conta Azul', ca_perdido: 'Perdida na Conta Azul', vinculo_divergente: 'Vínculo divergente', nao_localizado: 'Lançamento não localizado', marcador_duplicado: 'Marcador duplicado', parcela_sumiu: 'Excluída na Conta Azul' };
+  async function abaContaAzul(alvo) {
+    const [p, conf, fila, hist] = await Promise.all(['painel', 'conflitos', 'fila', 'historico'].map((r) => DC.api(`/api/admin/integrations/conta-azul/${r}`)));
+    if (!p.ok) { alvo.innerHTML = `<div class="dc-warn-box">${esc(p.error || 'Painel da Conta Azul indisponível.')}</div>`; return; }
+    const d = p.data, c = d.conexao || {}, v = d.vinculos || {}, fl = d.fila || {};
+    const n = (x) => (x == null ? '—' : x);
+    alvo.innerHTML = `<div class="dc-note">Só leitura. Sincronizar, resolver conflitos, reprocessar a fila e enviar parcelas são ações financeiras: ficam no Admin do Sra Luck → Integrações.</div>
+      ${!d.estruturaAplicada ? '<div class="dc-warn-box" style="margin-top:8px">Estrutura de sincronização ainda não aplicada no Sra Luck (migration_091).</div>' : ''}
+      <div class="dc-ip-kpis" style="margin-top:8px">
+        <div><small>OAuth</small><b>${c.autorizada ? 'Conectada' : c.tokenManual ? 'Token manual' : c.clientConfigurado ? 'Aguardando' : 'Sem Client ID'}</b></div>
+        <div><small>Vínculos seguros</small><b>${n(v.vinculado)}</b></div>
+        <div><small>Conflitos abertos</small><b>${n(d.conflitosAbertos)}</b></div>
+        <div><small>Fila pendente / erro</small><b>${n(fl.pendente)} / ${n(fl.erro)}</b></div>
+      </div>
+      <p class="dc-ov-p dc-muted">Última sincronização: ${d.ultimaSincronizacao ? `${esc(quando(d.ultimaSincronizacao.created_at))} · ${esc(d.ultimaSincronizacao.status)}${d.ultimaSincronizacao.erro ? ` — ${esc(d.ultimaSincronizacao.erro)}` : ''}` : 'nunca'} · leitura de alterações até ${esc(quando(d.cursorAlteracoes))} · token ${c.expiraEm ? `renova antes de ${esc(quando(c.expiraEm))}` : '—'}</p>
+      <h3 class="dc-nc-h">Conflitos em revisão</h3><div class="dc-ip-list">${(conf.data?.itens || []).map((x) => `<div class="dc-ip-row"><b>${esc(CONFLITO[x.tipo] || x.tipo)}</b><span>${esc(x.descricao)}${x.dados_sra?.valor != null || x.dados_externos?.valorBruto != null ? `<small class="dc-mono">Sra Luck ${esc(x.dados_sra?.valor ?? '—')} · ${esc(x.dados_sra?.vencimento ?? '—')} · ${esc(x.dados_sra?.status ?? '—')} | Conta Azul ${esc(x.dados_externos?.valorBruto ?? '—')} · ${esc(x.dados_externos?.vencimento ?? '—')} · ${esc(x.dados_externos?.status ?? '—')}</small>` : ''}</span><small>${esc(quando(x.created_at))}</small></div>`).join('') || '<div class="dc-empty">Nenhum conflito aberto.</div>'}</div>
+      <h3 class="dc-nc-h">Fila</h3><div class="dc-ip-list">${(fila.data?.itens || []).slice(0, 30).map((o) => `<div class="dc-ip-row"><b>${esc(String(o.operacao).replace(/_/g, ' '))}</b><span>${o.tentativas}/${o.max_tentativas} tentativa(s) · ${o.estado === 'pendente' ? `próxima ${esc(quando(o.proxima_tentativa_em))}` : esc(quando(o.concluida_em || o.created_at))}${o.ultimo_erro ? `<small>${esc(o.ultimo_erro)}</small>` : ''}</span>${DC.chip(o.estado, o.estado === 'concluida' ? 'ok' : o.estado === 'erro' ? 'bad' : o.estado === 'pendente' ? 'warn' : 'neutral')}</div>`).join('') || '<div class="dc-empty">Fila vazia.</div>'}</div>
+      <h3 class="dc-nc-h">Execuções</h3><div class="dc-ip-list">${(hist.data?.itens || []).slice(0, 20).map((e) => `<div class="dc-ip-row"><b>${esc(String(e.event_type).replace(/_/g, ' '))}</b><span>${esc(quando(e.created_at))}${e.erro ? `<small>${esc(e.erro)}</small>` : e.payload?.leitura ? `<small>${e.payload.leitura.eventos} evento(s) · ${e.payload.leitura.baixasAplicadas} baixa(s) aplicada(s) · ${e.payload.leitura.conflitos} conflito(s) · ${e.payload.envio?.enfileiradas ?? 0} envio(s)</small>` : ''}</span>${DC.chip(e.status, e.status === 'processado' ? 'ok' : e.status === 'erro' ? 'bad' : 'warn')}</div>`).join('') || '<div class="dc-empty">Nenhuma execução registrada.</div>'}</div>`;
+  }
+
+  const EXTRAS = { rd_station: [['importacoes', 'Importações', abaCrm]], conta_azul: [['operacao', 'Operação', abaContaAzul]] };
+
+  // ------------------------------------------------------------------ drawer
+
   /** Drawer do padrão. partes: { topo, credenciais, eventos, extras, rodape } em HTML já montado pela página. */
   function abrir(id, partes, aoSalvar) {
     const i = integracao(id);
     if (!i) return false;
     const disp = i.funcoes.filter((f) => f.situacao === 'disponivel').length;
+    const extras = EXTRAS[id] || [];
     const abas = [
       ['visao', 'Visão', `${partes.topo}${partes.extras || ''}<h3 class="dc-nc-h">Credenciais</h3>${partes.credenciais}<div class="dc-note" style="margin-top:6px">Segredos ficam no cofre cifrado do Sra Luck e são editados no Admin → Integrações. Aqui aparecem só a origem e a máscara.</div>
         <h3 class="dc-nc-h">Resumo</h3><p class="dc-ov-p">${disp} de ${i.funcoes.length} funções disponíveis · ${i.funcoes.filter((f) => f.situacao === 'api_permite').length} que a API permite e ainda não foram feitas · ${i.funcoes.filter((f) => f.situacao === 'api_nao_permite').length} que a API não permite.</p>`],
       ['funcoes', `Funções (${i.funcoes.length})`, abaFuncoes(i)],
+      ...extras.map(([k, l]) => [k, l, `<div data-extra="${k}"><div class="dc-muted">Carregando…</div></div>`]),
       ['dados', 'Dados e mapeamento', abaDados(i)],
       ['sync', 'Sincronização', abaSync(i)],
       ['webhooks', 'Webhooks', abaWebhooks(i)],
@@ -83,25 +206,63 @@
     S.aba = { id, aba: ativa };
     const ov = DC.openDrawer(i.nome, `<div class="dc-tabs" role="tablist">${abas.map(([k, l]) => `<button type="button" data-aba="${k}" class="${k === ativa ? 'active' : ''}">${esc(l)}</button>`).join('')}</div>${abas.map(([k, , h]) => `<section data-painel="${k}"${k === ativa ? '' : ' hidden'}>${h}</section>`).join('')}`, { footer: partes.rodape || '' });
     ov.querySelector('.dc-drawer')?.classList.add('wide');
-    ov.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-aba]'); if (!b) return;
-      S.aba = { id, aba: b.dataset.aba };
-      ov.querySelectorAll('[data-aba]').forEach((x) => x.classList.toggle('active', x === b));
-      ov.querySelectorAll('[data-painel]').forEach((p) => { p.hidden = p.dataset.painel !== b.dataset.aba; });
+    const carregados = new Set();
+    const carregarExtra = (k) => {
+      const ex = extras.find(([x]) => x === k), alvo = ov.querySelector(`[data-extra="${k}"]`);
+      if (!ex || !alvo || carregados.has(k)) return;
+      carregados.add(k);
+      ex[2](alvo).catch(() => { alvo.innerHTML = '<div class="dc-warn-box">Falha ao carregar.</div>'; });
+    };
+    carregarExtra(ativa);
+    void preencherFormularios(ov, i);
+    ov.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-aba]');
+      if (b) {
+        S.aba = { id, aba: b.dataset.aba };
+        ov.querySelectorAll('[data-aba]').forEach((x) => x.classList.toggle('active', x === b));
+        ov.querySelectorAll('[data-painel]').forEach((p) => { p.hidden = p.dataset.painel !== b.dataset.aba; });
+        carregarExtra(b.dataset.aba);
+        return;
+      }
+      const imp = e.target.closest('[data-imp]');
+      if (imp) {
+        const alvo = ov.querySelector(`[data-itens="${CSS.escape(imp.dataset.imp)}"]`);
+        if (!alvo) return;
+        alvo.hidden = !alvo.hidden;
+        if (!alvo.hidden && !alvo.dataset.ok) {
+          alvo.innerHTML = '<div class="dc-muted">Carregando…</div>';
+          const r = await DC.api(`/api/admin/integrations/rd-station/importacoes/${encodeURIComponent(imp.dataset.imp)}/itens`);
+          alvo.dataset.ok = '1';
+          alvo.innerHTML = r.ok ? `<div class="dc-ip-list" style="margin:4px 0 8px 12px">${(r.data.itens || []).map(itemHtml).join('') || '<div class="dc-empty">Sem itens (negociações só atualizadas não aparecem).</div>'}</div>` : `<div class="dc-warn-box">${esc(r.error || 'Falha.')}</div>`;
+        }
+        return;
+      }
+      const botao = e.target.closest('[data-importar]');
+      if (botao) {
+        if (!await DC.modal('Importar do RD Station', '<div class="dc-note">Lê o RD (somente leitura) com o funil, as etapas e o mapeamento configurados. Clientes novas entram em Aguardando cadastro; duplicidades vão para revisão no Admin.</div>', { confirmText: 'Importar agora' })) return;
+        const r = await DC.action(botao, () => DC.api('/api/admin/integrations/rd-station/importar', { method: 'POST', body: {}, timeout: 60000 }));
+        if (r?.ok) DC.toast(`RD: ${r.data.totalRd ?? 0} lida(s) · ${r.data.criadas ?? 0} nova(s) · ${(r.data.duplicadas ?? 0) + (r.data.clienteExistente ?? 0)} para revisar.`);
+        carregados.delete('importacoes'); carregarExtra('importacoes');
+      }
     });
     ov.addEventListener('submit', async (e) => {
       const form = e.target.closest('[data-cfg]'); if (!form) return;
       e.preventDefault();
-      const v = (n) => form.elements[n].value.trim();
-      const num = (n) => (v(n) === '' ? null : Number(v(n)));
-      const config = { ativo: form.elements.ativo.checked, modelo: v('modelo') || null, prompt: v('prompt') || null, temperatura: num('temperatura'), maxTokens: num('maxTokens'), limiteDiario: num('limiteDiario') };
+      const f = i.funcoes.find((x) => x.id === form.dataset.cfg);
+      const config = lerFormulario(form, f);
       const btn = form.querySelector('[type="submit"]');
-      const r = await DC.action(btn, () => DC.api('/api/admin/integrations/config', { method: 'POST', body: { provedor: id, funcao: form.dataset.cfg, config, versao: Number(form.dataset.versao) } }), { success: 'Função salva. Vale a partir da próxima chamada (até 30 s de cache).' });
+      const r = await DC.action(btn, () => DC.api('/api/admin/integrations/config', { method: 'POST', body: { provedor: id, funcao: form.dataset.cfg, config, versao: Number(form.dataset.versao) } }), { success: 'Função salva. Vale a partir da próxima execução (até 30 s de cache).' });
       if (r?.ok) { await carregar(); aoSalvar?.(id); }
     });
     ov.addEventListener('change', (e) => {
-      const t = e.target; if (t.name !== 'ativo') return;
-      const b = t.closest('.dc-ip-toggle')?.querySelector('b'); if (b) b.textContent = t.checked ? 'Função ligada' : 'Função desligada';
+      const t = e.target;
+      if (t.dataset?.c === 'pipelineId') {
+        // Etapas dependem do funil escolhido.
+        const form = t.closest('[data-cfg]'), f = i.funcoes.find((x) => x.id === form?.dataset.cfg);
+        const campo = (f?.campos || []).find((c) => c.tipo === 'multi_selecao' && c.opcoesDe === 'rd_etapas');
+        const alvo = form?.querySelector(`[data-multi="${CSS.escape(campo?.chave || '')}"]`);
+        if (campo && alvo) alvo.outerHTML = campoHtml(f, campo, { ...(f.config || {}), pipelineId: t.value || null, [campo.chave]: [] }, S.opcoes[id], '');
+      }
     });
     return true;
   }
