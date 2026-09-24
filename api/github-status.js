@@ -19,9 +19,8 @@ const PROJECTS = async () => ({
 
 async function ghHeaders() {
   const token = String((await getSecret('GITHUB_TOKEN')) || '').trim();
-  const h = { Accept: 'application/vnd.github+json', 'User-Agent': 'sra-luck-dev-console', 'X-GitHub-Api-Version': '2022-11-28' };
-  if (token) h.Authorization = `Bearer ${token}`;
-  return h;
+  if (!token) { const e = new Error('Configure GITHUB_TOKEN no cofre do Dev Console.'); e.status = 503; e.code = 'GITHUB_TOKEN_NOT_CONFIGURED'; throw e; }
+  return { Accept: 'application/vnd.github+json', 'User-Agent': 'sra-luck-dev-console', 'X-GitHub-Api-Version': '2022-11-28', Authorization: `Bearer ${token}` };
 }
 async function github(repo, path, init = {}) {
   const r = await fetch(`https://api.github.com/repos/${repo}${path}`, { ...init, headers: { ...(await ghHeaders()), ...(init.body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store' });
