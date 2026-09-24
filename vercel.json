@@ -80,6 +80,10 @@
     {
       "source": "/api/agentes",
       "destination": "/api/infra-scan?mode=agents"
+    },
+    {
+      "source": "/api/connections-secrets",
+      "destination": "/api/infra-scan?mode=connections-secrets"
     }
   ],
   "headers": [
