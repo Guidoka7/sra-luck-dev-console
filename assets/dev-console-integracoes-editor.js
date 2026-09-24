@@ -109,6 +109,17 @@
     await refreshAndReopen(id);
   }
 
+  async function oauthProvider(id, btn) {
+    const endpoint = id === 'conta_azul'
+      ? '/api/admin/integrations/conta-azul/authorize-url'
+      : '/api/admin/integrations/rd-station/authorize-url';
+    const r = await DC.action(btn, () => DC.api(endpoint, { timeout: 30000 }));
+    const url = r?.data?.url || r?.data?.authorizeUrl || r?.data?.authorizationUrl;
+    if (!r?.ok || !url) return;
+    window.open(url, '_blank', 'noopener');
+    DC.toast('Autorização aberta em nova aba. Depois de concluir, volte aqui e use Validar e ativar.');
+  }
+
   async function vapidAction(payload, btn, success) {
     const r = await DC.action(btn, () => DC.api('/api/admin/integrations/web-push/vapid', {
       method: 'POST', body: payload, timeout: 30000
@@ -166,7 +177,9 @@
       : '';
     const footer = [
       id === 'gemini' ? '<button class="dc-btn" onclick="openGeminiDrawer()">Mensagem diária</button>' : '',
-      canTest(id) ? `<button class="dc-btn primary" onclick="testProvider('${id}',this)">Testar conexão</button>` : ''
+      id === 'rd_station' ? '<button class="dc-btn" onclick="DCIntegrationEditor.oauthProvider(\'rd_station\',this)">Autorizar RD Station</button>' : '',
+      id === 'conta_azul' ? '<button class="dc-btn" onclick="DCIntegrationEditor.oauthProvider(\'conta_azul\',this)">Autorizar Conta Azul</button>' : '',
+      canTest(id) ? `<button class="dc-btn primary" onclick="testProvider('${id}',this)">Testar conexão real</button>` : ''
     ].join('');
     DCIntegracoes.abrir(id, { topo, credenciais: editorCredenciais(id), eventos: ev, extras, rodape: footer }, () => enhancedOpenProvider(id));
     window.lucide?.createIcons();
@@ -178,7 +191,7 @@
     return oldTest(id, btn);
   }
 
-  window.DCIntegrationEditor = { saveCredential, removeCredential, toggleProvider, generateVapid, importVapid, testVapid };
+  window.DCIntegrationEditor = { saveCredential, removeCredential, toggleProvider, oauthProvider, generateVapid, importVapid, testVapid };
   window.openProvider = enhancedOpenProvider;
   window.testProvider = enhancedTestProvider;
 })();
