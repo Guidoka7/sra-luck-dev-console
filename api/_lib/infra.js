@@ -1,4 +1,5 @@
 const { rest } = require('./supabase');
+const { getSecret } = require('./secrets');
 
 function nowIso(){ return new Date().toISOString(); }
 function num(v){ const n=Number(v); return Number.isFinite(n)?n:null; }
@@ -126,16 +127,16 @@ async function fetchSupabaseProjectMetrics({source,ref,token,snapshotSource=sour
 }
 
 async function fetchSupabaseMetrics(){
- const ref=String(process.env.SRA_SUPABASE_PROJECT_REF||'').trim();
- const token=String(process.env.SRA_SUPABASE_ACCESS_TOKEN||'').trim();
- return fetchSupabaseProjectMetrics({source:'supabase',ref,token,snapshotSource:'supabase',displayName:'Supabase Sra Luck'});
+ const [ref,token]=await Promise.all([getSecret('SRA_SUPABASE_PROJECT_REF'),getSecret('SRA_SUPABASE_ACCESS_TOKEN')]);
+ return fetchSupabaseProjectMetrics({source:'supabase',ref:String(ref||''),token:String(token||''),snapshotSource:'supabase',displayName:'Supabase Sra Luck'});
 }
 
 async function fetchDevSupabaseMetrics(){
  const url=String(process.env.DEV_SUPABASE_URL||'').replace(/\/$/,'');
  const service=String(process.env.DEV_SUPABASE_SERVICE_ROLE_KEY||'').trim();
- const ref=String(process.env.DEV_SUPABASE_PROJECT_REF||'').trim();
- const token=String(process.env.DEV_SUPABASE_ACCESS_TOKEN||'').trim();
+ const [refRaw,tokenRaw]=await Promise.all([getSecret('DEV_SUPABASE_PROJECT_REF'),getSecret('DEV_SUPABASE_ACCESS_TOKEN')]);
+ const ref=String(refRaw||'').trim();
+ const token=String(tokenRaw||'').trim();
  if(!url||!service)return {source:'dev_supabase',configured:false,ok:false,status:'not_configured',message:'Configure DEV_SUPABASE_URL e DEV_SUPABASE_SERVICE_ROLE_KEY.'};
  let database={ok:false,latencyMs:null,httpStatus:null};
  try{
@@ -156,7 +157,8 @@ async function fetchDevSupabaseMetrics(){
 }
 
 async function fetchSupabaseLogs(hours=1){
- const ref=String(process.env.SRA_SUPABASE_PROJECT_REF||'').trim(); const token=String(process.env.SRA_SUPABASE_ACCESS_TOKEN||'').trim();
+ const [refRaw,tokenRaw]=await Promise.all([getSecret('SRA_SUPABASE_PROJECT_REF'),getSecret('SRA_SUPABASE_ACCESS_TOKEN')]);
+ const ref=String(refRaw||'').trim(); const token=String(tokenRaw||'').trim();
  if(!ref||!token)return {configured:false,ok:false,status:'not_configured',items:[]};
  const end=new Date(),start=new Date(end.getTime()-Math.min(Math.max(hours,1),24)*3600000);
  const sql=`select timestamp, source, event_message, toInt32OrZero(log_attributes['response.status_code']) as status, log_attributes['request.path'] as path from logs where positionCaseInsensitive(event_message, 'error') > 0 or positionCaseInsensitive(event_message, 'fatal') > 0 or positionCaseInsensitive(event_message, 'panic') > 0 or toInt32OrZero(log_attributes['response.status_code']) >= 500 order by timestamp desc limit 100`;
@@ -171,8 +173,9 @@ async function fetchSupabaseLogs(hours=1){
 }
 
 async function fetchSraStorage(){
- const base=String(process.env.SRA_LUCK_BASE_URL||'https://sra-luck-react.vercel.app').replace(/\/$/,'');
- const token=String(process.env.SRA_LUCK_SERVICE_TOKEN||'').trim();
+ const [baseRaw,tokenRaw]=await Promise.all([getSecret('SRA_LUCK_BASE_URL'),getSecret('SRA_LUCK_SERVICE_TOKEN')]);
+ const base=String(baseRaw||'https://sra-luck-react.vercel.app').replace(/\/$/,'');
+ const token=String(tokenRaw||'').trim();
  if(!token)return {source:'storage',configured:false,ok:false,status:'not_configured',message:'Configure SRA_LUCK_SERVICE_TOKEN para validar o Storage principal.'};
  try{
   const {response,ms}=await timedFetch(base+'/api/admin/monitoramento-storage',{headers:{Accept:'application/json','x-dev-console-token':token,'x-dev-actor-id':'infra-guardian','x-dev-actor-role':'owner'}},12000);
@@ -194,8 +197,9 @@ function backupTimestamp(item){
  return null;
 }
 async function fetchSupabaseBackups(){
- const ref=String(process.env.SRA_SUPABASE_PROJECT_REF||'').trim();
- const token=String(process.env.SRA_SUPABASE_ACCESS_TOKEN||'').trim();
+ const [refRaw,tokenRaw]=await Promise.all([getSecret('SRA_SUPABASE_PROJECT_REF'),getSecret('SRA_SUPABASE_ACCESS_TOKEN')]);
+ const ref=String(refRaw||'').trim();
+ const token=String(tokenRaw||'').trim();
  if(!ref||!token)return {source:'backups',configured:false,ok:false,status:'not_configured',message:'Configure o acesso de observabilidade do Supabase para validar backups.'};
  try{
   const {response,ms}=await timedFetch(`https://api.supabase.com/v1/projects/${encodeURIComponent(ref)}/database/backups`,{headers:{Authorization:`Bearer ${token}`,Accept:'application/json'}},12000);
@@ -222,7 +226,8 @@ async function fetchGuardianFreshness(){
 }
 
 async function fetchCloudflareWorker(){
- const account=String(process.env.CLOUDFLARE_ACCOUNT_ID||'').trim(),token=String(process.env.CLOUDFLARE_API_TOKEN||'').trim(),script=String(process.env.CLOUDFLARE_WORKER_SCRIPT||'').trim();
+ const [accountRaw,tokenRaw,scriptRaw]=await Promise.all([getSecret('CLOUDFLARE_ACCOUNT_ID'),getSecret('CLOUDFLARE_API_TOKEN'),getSecret('CLOUDFLARE_WORKER_SCRIPT')]);
+ const account=String(accountRaw||'').trim(),token=String(tokenRaw||'').trim(),script=String(scriptRaw||'').trim();
  if(!account||!token||!script)return {source:'cloudflare',configured:false,ok:false,status:'not_configured',message:'Configure CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN e CLOUDFLARE_WORKER_SCRIPT.'};
  const end=new Date(),start=new Date(end.getTime()-15*60000);
  const query=`query WorkerInfra($accountTag: string, $datetimeStart: string, $datetimeEnd: string, $scriptName: string) { viewer { accounts(filter: {accountTag: $accountTag}) { workersInvocationsAdaptive(limit: 1, filter: {scriptName: $scriptName, datetime_geq: $datetimeStart, datetime_leq: $datetimeEnd}) { sum { requests errors subrequests } quantiles { cpuTimeP50 cpuTimeP99 memoryUsageBytesP50 memoryUsageBytesP90 memoryUsageBytesP99 memoryUsageBytesP999 } } } } }`;
@@ -247,7 +252,8 @@ function runtimeMetrics(){
 }
 
 async function fetchVercel(){
- const token=String(process.env.DEV_VERCEL_ACCESS_TOKEN||'').trim(),project=String(process.env.VERCEL_PROJECT_ID||process.env.DEV_VERCEL_PROJECT_ID||'').trim(),team=String(process.env.DEV_VERCEL_TEAM_ID||'').trim();
+ const [tokenRaw,projectRaw,teamRaw]=await Promise.all([getSecret('DEV_VERCEL_ACCESS_TOKEN'),getSecret('DEV_VERCEL_PROJECT_ID'),getSecret('DEV_VERCEL_TEAM_ID')]);
+ const token=String(tokenRaw||'').trim(),project=String(process.env.VERCEL_PROJECT_ID||projectRaw||'').trim(),team=String(teamRaw||'').trim();
  if(!token||!project)return {source:'vercel',configured:false,ok:false,status:'not_configured',message:'Configure DEV_VERCEL_ACCESS_TOKEN; o projeto usa VERCEL_PROJECT_ID do runtime da Vercel ou DEV_VERCEL_PROJECT_ID como fallback. Métricas avançadas de função permanecem no Vercel Observability até existir export/API configurada.'};
  const p=new URLSearchParams({projectId:project,limit:'8'});if(team)p.set('teamId',team);
  try{
