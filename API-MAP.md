@@ -104,3 +104,6 @@ Execução do Guardian: `agents.run`.
 - Supabase Management API: `/v1/projects/{ref}/analytics/endpoints/logs`
 - Cloudflare GraphQL: `workersInvocationsAdaptive`
 - Vercel REST API: lista de deployments do projeto configurado
+
+- `GET/POST /api/admin/regras-operacionais`: leitura e alteração das regras operacionais protegidas (escrita exclusiva do Dev no Sra Luck).
+- `PATCH /api/admin/notificacoes/eventos`: liga/desliga e edita os avisos da jornada da migration 093.
