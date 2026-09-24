@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — Central Inteligente de Notificações (etapa 1)
+
+- Notificações: drawer da Central com as abas Operação, Chat Gemini, Regras financeiras, Agenda/jornada/eventos, Relatórios, Configurações e Auditoria, sobre `/api/admin/notificacoes/lotes*` do Sra Luck (Guidoka7/sra-luck-react#59);
+- uma mensagem por cliente (parcelas agrupadas), régua por faixa, dry run, prévia por amostragem, "por que ficou de fora" por cliente, aprovação com confirmação, fila em horário silencioso, reprocessar só falhas;
+- o chat do Gemini responde só com os dados do lote e apenas **sugere** ações; quem executa é você, pelo botão;
+- sem backend novo publicado, a Central mostra "indisponível" com o motivo real (versão antiga, migration 088 ou conector), sem dados simulados;
+- varredura automática não dispara mais rotinas de cobrança (exigem confirmação humana);
+- mensagens de erro do conector cobrem os códigos da allowlist M2M atual.
+
 ## 0.4.0 — Central de Problemas
 
 - navegação por áreas (Admin Sra Luck com submenu), páginas duplicadas removidas, Engenharia no lugar de Código & Releases;
