@@ -93,7 +93,7 @@ Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funçõ
 
 - **Notificações** (`notificacoes.html`): ligar/desligar o lembrete de atraso, frequência, máximo de tentativas, criar/editar/ativar templates, envio manual para uma cliente e envio forçado de atrasos.
 - **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
-- **Integrações** (`integracoes.html` + `assets/dev-console-integracoes.js`): padrão por integração montado do catálogo do Sra Luck (funções com situação real, origem/destino, mapeamento, sincronização, webhooks, histórico, regras e limites), testes de conexão, teste/sincronização do RD Station e configuração por função do Gemini. Credenciais e chaves VAPID continuam sendo editadas no Admin.
+- **Integrações** (`integracoes.html` + `assets/dev-console-integracoes.js`): padrão por integração montado do catálogo do Sra Luck (funções com situação real, origem/destino, mapeamento, sincronização, webhooks, histórico, regras e limites), testes de conexão, teste/sincronização do RD Station e configuração por função do Gemini. Credenciais das integrações e chaves VAPID são gerenciadas diretamente no Dev Console: cadastrar/substituir/remover segredo, ativar/pausar provedor, gerar/importar/testar VAPID. O valor atual nunca é devolvido em texto puro.
 
 ## Carrossel do App
 
@@ -150,3 +150,10 @@ Funções:
 - incidentes de infraestrutura persistidos.
 
 A interface diferencia `não configurado` de `indisponível` e nunca substitui uma métrica ausente por valor fictício.
+
+
+## Configuração transferida para o Dev
+- Integrações: credenciais cifradas, VAPID e parâmetros das funções catalogadas.
+- Notificações: régua unificada (incluindo 31+ dias), versões para uma/várias parcelas e avisos da jornada (migration 093).
+- Regras operacionais: prazo de liberação, teto mensal, percentuais por parcelamento e requisitos do acesso ao app via `/api/admin/regras-operacionais`.
+- O Vault interno do Supabase (`sra_luck_app_url` / `sra_luck_cron_secret`) não possui endpoint de escrita no backend e não é simulado pelo console.
