@@ -8,13 +8,14 @@ const agents = require('./_lib/agents');
 const incidents = require('./_lib/incidents');
 const { hasPermission } = require('./_lib/rbac');
 const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
+const { getSecret, saveSecret, removeSecret, catalogStatus } = require('./_lib/secrets');
 
 function safeEqual(a,b){
  const A=Buffer.from(String(a||'')),B=Buffer.from(String(b||''));
  return A.length===B.length&&A.length>0&&crypto.timingSafeEqual(A,B);
 }
-function cronAuthorized(req){
- const secret=String(process.env.CRON_SECRET||'');
+async function cronAuthorized(req){
+ const secret=String((await getSecret('CRON_SECRET'))||'');
  const auth=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');
  return Boolean(secret&&safeEqual(secret,auth));
 }
@@ -185,6 +186,28 @@ module.exports=async function handler(req,res){
   }catch(e){return json(res,503,{erro:'Não foi possível salvar. Confirme se supabase/003_custom_apis.sql foi aplicado.',detalhe:e?.message||null})}
  }
 
+ if(mode==='connections-secrets'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'integrations.view');if(!actor)return;
+   try{return json(res,200,{ok:true,groups:await catalogStatus(),bootstrap:{DEV_SUPABASE_URL:Boolean(process.env.DEV_SUPABASE_URL),DEV_SUPABASE_SERVICE_ROLE_KEY:Boolean(process.env.DEV_SUPABASE_SERVICE_ROLE_KEY),DEV_SESSION_SECRET:Boolean(process.env.DEV_SESSION_SECRET)}})}
+   catch(e){return json(res,503,{erro:'Cofre técnico indisponível.',codigo:'DEV_VAULT_UNAVAILABLE',detalhe:e?.message||null})}
+  }
+  if(req.method==='POST'){
+   if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+   const actor=await requireSession(req,res,'integrations.manage');if(!actor)return;
+   let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   const key=String(input?.key||'').trim(),action=String(input?.action||'save');
+   try{
+    if(action==='remove'){await removeSecret(key);await audit({actor_user_id:actor.id,action:'connector_secret.remove',resource:'connector_secret',resource_id:key,details:{}});return json(res,200,{ok:true,groups:await catalogStatus()})}
+    if(action!=='save')return json(res,400,{erro:'Ação desconhecida.'});
+    await saveSecret(key,input?.value,actor.id);
+    await audit({actor_user_id:actor.id,action:'connector_secret.save',resource:'connector_secret',resource_id:key,details:{source:'dev_vault'}});
+    return json(res,200,{ok:true,groups:await catalogStatus()});
+   }catch(e){return json(res,e?.status||503,{erro:e?.message||'Não foi possível salvar a credencial técnica.',codigo:'DEV_VAULT_WRITE_FAILED'})}
+  }
+  return methodNotAllowed(res,['GET','POST']);
+ }
+
  if(mode!=='scan'){
   if(req.method!=='GET')return methodNotAllowed(res,['GET']);
   const actor=await requireSession(req,res,'infrastructure.view');if(!actor)return;
@@ -247,7 +270,7 @@ module.exports=async function handler(req,res){
  }
 
  if(!['GET','POST'].includes(req.method))return methodNotAllowed(res,['GET','POST']);
- const cron=cronAuthorized(req);
+ const cron=await cronAuthorized(req);
  if(req.method==='GET'&&!cron)return json(res,401,{erro:'Execução agendada não autorizada.',codigo:'CRON_UNAUTHORIZED'});
  let actor=null;if(!cron){actor=await requireSession(req,res,'agents.run');if(!actor)return}
  try{
