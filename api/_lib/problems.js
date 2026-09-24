@@ -431,10 +431,25 @@ async function applyAction({ actor, problemaId, actionId, params, auto = false }
   return { status: response.ok ? 200 : (response.status >= 400 ? response.status : 502), body };
 }
 
+/**
+ * Guarda o resultado de cada fluxo testado (latência real e se respondeu)
+ * em dev_metric_snapshots (source "probe"), para a Visão Geral ter histórico
+ * de API e fluxos. Fluxos sem conector não geram ponto (ausência ≠ zero).
+ */
+async function persistProbes(fontes, observedAt) {
+  const rows = (fontes || []).filter((f) => !f.naoConfigurado && Number.isFinite(Number(f.ms))).map((f) => ({
+    source: 'probe', metric_key: f.id, metric_value: Number(f.ms), unit: 'ms', state: f.ok ? 'healthy' : 'critical',
+    dimensions: { label: f.label, area: f.area, status: f.status ?? null }, observed_at: observedAt,
+  }));
+  if (!rows.length) return 0;
+  try { await rest('dev_metric_snapshots', { method: 'POST', body: JSON.stringify(rows) }); return rows.length; } catch { return 0; }
+}
+
 async function autoResolve() {
   const started = Date.now();
   const observedAt = new Date().toISOString();
   const result = await detect(null);
+  const probes = await persistProbes(result.fontes, observedAt);
   const aplicadas = [];
   for (const p of result.problemas) {
     for (const a of p.acoes) {
@@ -445,11 +460,11 @@ async function autoResolve() {
   }
   const final = aplicadas.length ? await detect(null) : result;
   const incidents = await persistIncidents(final, observedAt);
-  const summary = { detectados: result.resumo.total, restantes: final.resumo.total, aplicadas, incidents };
+  const summary = { detectados: result.resumo.total, restantes: final.resumo.total, aplicadas, incidents, probes };
   try {
     await rest('dev_job_runs', { method: 'POST', body: JSON.stringify({ agent_key: 'problem-center', job_key: 'problems.autofix', status: aplicadas.some(a => !a.ok) ? 'warning' : 'ok', started_at: observedAt, finished_at: new Date().toISOString(), duration_ms: Date.now() - started, processed_count: result.resumo.total, success_count: aplicadas.filter(a => a.ok).length, failure_count: aplicadas.filter(a => !a.ok).length, details: summary }) });
   } catch { /* idem */ }
   return summary;
 }
 
-module.exports = { detect, applyAction, autoResolve, persistIncidents, ACTIONS, normalizeRoute, sraFetch };
+module.exports = { detect, applyAction, autoResolve, persistIncidents, persistProbes, ACTIONS, normalizeRoute, sraFetch };

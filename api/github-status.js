@@ -89,6 +89,56 @@ async function overview() {
   return { ok: true, geradoEm: new Date().toISOString(), tokens: { github: Boolean(process.env.GITHUB_TOKEN), vercel: Boolean(process.env.DEV_VERCEL_ACCESS_TOKEN) }, repos: { sra, console: dc }, deploys: { sra: vsra, console: vdc } };
 }
 
+/**
+ * "Últimas alterações" da Visão Geral: commits e CI da main do Sra Luck,
+ * deploys da Vercel, migrations presentes no repositório e se a produção
+ * roda o mesmo código da main. Só afirma sincronia quando há os dois SHAs.
+ */
+async function changes() {
+  const repos = REPOS(), projects = PROJECTS();
+  const settle = (p) => p.then((v) => ({ ok: true, v })).catch((e) => ({ ok: false, erro: e.message, status: e.status || null }));
+  const [commitsR, runsR, dirR, depR] = await Promise.all([
+    settle(github(repos.sra, '/commits?sha=main&per_page=10')),
+    settle(github(repos.sra, '/actions/runs?branch=main&per_page=10')),
+    settle(github(repos.sra, '/contents/supabase?ref=main')),
+    settle(deployments(projects.sra)),
+  ]);
+  const commits = commitsR.ok ? (Array.isArray(commitsR.v) ? commitsR.v : []).map(normalizeCommit) : [];
+  const runs = runsR.ok ? (runsR.v?.workflow_runs || []).map(normalizeRun) : [];
+  const main = commits[0] || null;
+
+  let migrations = { ok: false, erro: dirR.ok ? null : dirR.erro, itens: [] };
+  if (dirR.ok && Array.isArray(dirR.v)) {
+    const files = dirR.v.map((f) => f.name).map((name) => ({ name, n: Number((name.match(/^migration_(\d+)_.+\.sql$/) || [])[1]) })).filter((f) => Number.isFinite(f.n)).sort((a, b) => b.n - a.n).slice(0, 6);
+    const itens = await Promise.all(files.map(async (f) => {
+      const c = await github(repos.sra, `/commits?sha=main&path=${encodeURIComponent(`supabase/${f.name}`)}&per_page=1`).catch(() => null);
+      const commit = Array.isArray(c) && c[0] ? normalizeCommit(c[0]) : null;
+      return { numero: f.n, arquivo: f.name, alteradaEm: commit?.date || null, commit: commit?.sha || null, mensagem: commit?.message || null };
+    }));
+    migrations = { ok: true, itens, nota: 'Presentes no repositório (main). A aplicação no banco é manual e não é verificável daqui.' };
+  }
+
+  const dep = depR.ok ? depR.v : { configured: false, deployments: [], erro: depR.erro };
+  const producao = (dep.deployments || []).find((d) => d.current) || (dep.deployments || []).find((d) => d.target === 'production' && d.state === 'READY') || null;
+  let sincronia = { estado: 'desconhecido', motivo: !dep.configured ? 'Projeto Vercel do Sra Luck não configurado (SRA_VERCEL_PROJECT_ID).' : !producao ? 'Nenhum deploy de produção encontrado.' : !producao.sha ? 'O deploy de produção não informa o commit.' : !main ? 'Não foi possível ler a main.' : null };
+  if (producao?.sha && main?.sha) {
+    if (producao.sha === main.sha) sincronia = { estado: 'sincronizado', producaoSha: producao.sha, mainSha: main.sha };
+    else {
+      const cmp = await github(repos.sra, `/compare/${producao.sha}...${main.sha}`).catch(() => null);
+      sincronia = cmp
+        ? { estado: cmp.ahead_by > 0 ? 'producao_atras' : 'divergente', commitsAtras: cmp.ahead_by ?? null, commitsNaFrente: cmp.behind_by ?? null, producaoSha: producao.sha, mainSha: main.sha }
+        : { estado: 'desconhecido', motivo: 'Não foi possível comparar os commits.', producaoSha: producao.sha, mainSha: main.sha };
+    }
+  }
+  return {
+    ok: true, geradoEm: new Date().toISOString(), repo: repos.sra,
+    fontes: { github: commitsR.ok ? 'ok' : commitsR.erro, vercel: dep.configured === false ? (dep.erro || 'não configurado') : 'ok' },
+    main, commits, runs, ci: runs[0] || null, migrations,
+    deploy: { configured: dep.configured !== false, erro: dep.erro || null, producao, recentes: (dep.deployments || []).slice(0, 8) },
+    sincronia,
+  };
+}
+
 async function legacySummary(repo) {
   const [commitsRaw, runsRaw] = await Promise.all([github(repo, '/commits?sha=main&per_page=20'), github(repo, '/actions/runs?branch=main&per_page=20')]);
   const s = { commits: (Array.isArray(commitsRaw) ? commitsRaw : []).map(normalizeCommit), runs: (runsRaw?.workflow_runs || []).map(normalizeRun) };
@@ -166,6 +216,7 @@ module.exports = async function handler(req, res) {
   const resource = String(req.query?.resource || 'summary');
   try {
     if (resource === 'overview') return json(res, 200, { ...(await overview()), podeOperar: hasPermission(actor, 'releases.manage') });
+    if (resource === 'changes') return json(res, 200, await changes());
     if (resource === 'branches') {
       const repo = REPOS()[req.query?.repo === 'console' ? 'console' : 'sra'];
       const data = await github(repo, '/branches?per_page=100');
@@ -182,3 +233,4 @@ module.exports = async function handler(req, res) {
     return json(res, error?.status || 502, { ok: false, erro: error?.message || 'Não foi possível consultar o GitHub.' });
   }
 };
+module.exports.changes = changes;

@@ -24,7 +24,8 @@
 
   function line(container, opts) {
     const unit = opts.unit || '';
-    const fmt = (v) => (v == null || !Number.isFinite(v) ? '—' : `${v.toFixed(v >= 100 ? 0 : 1)}${unit}`);
+    const dec = opts.decimals;
+    const fmt = (v) => (v == null || !Number.isFinite(v) ? '—' : `${v.toFixed(dec ?? (v >= 100 ? 0 : 1))}${unit}`);
     const series = (opts.series || []).map((s) => ({ ...s, points: (s.points || []).map((p) => ({ t: new Date(p.t).getTime(), v: Number(p.v) })).filter((p) => Number.isFinite(p.t) && Number.isFinite(p.v)).sort((a, b) => a.t - b.t) }));
     container.textContent = '';
     container.classList.add('dcc-root');
@@ -57,7 +58,11 @@
     const tMin = opts.from ?? Math.min(...all.map((p) => p.t));
     const tMax = opts.to ?? Math.max(...all.map((p) => p.t));
     const span = Math.max(1, tMax - tMin);
-    const yMax = opts.yMax ?? Math.max(1, ...all.map((p) => p.v)) * 1.1;
+    // Passo "redondo" (1, 2, 2,5, 5 × 10ⁿ) para as 4 linhas da grade caírem em valores inteiros legíveis.
+    const bruto = Math.max(1, ...all.map((p) => p.v)) * 1.05 / 4, mag = 10 ** Math.floor(Math.log10(bruto));
+    const passo = [1, 2, 2.5, 5, 10].map((k) => k * mag).find((k) => k >= bruto && (dec !== 0 || Number.isInteger(k))) || 10 * mag;
+    const yMax = opts.yMax ?? Math.max(dec === 0 ? 4 : 0, passo * 4);
+    m.l = Math.max(m.l, String(Math.round(yMax)).length * 6 + unit.length * 5 + 12);
     const x = (t) => m.l + ((t - tMin) / span) * (W - m.l - m.r);
     const y = (v) => m.t + (1 - Math.min(v, yMax) / yMax) * (H - m.t - m.b);
     const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: 'img', 'aria-label': opts.label || 'Gráfico' }, wrap);

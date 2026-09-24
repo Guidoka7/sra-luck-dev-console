@@ -2,7 +2,7 @@ const crypto=require('crypto');
 const { json, body, methodNotAllowed, requestId, sameOrigin } = require('./_lib/http');
 const { requireSession } = require('./_lib/rbac');
 const { rest, audit } = require('./_lib/supabase');
-const { detect, applyAction, autoResolve, persistIncidents } = require('./_lib/problems');
+const { detect, applyAction, autoResolve, persistIncidents, persistProbes } = require('./_lib/problems');
 const customApis = require('./_lib/custom-apis');
 const agents = require('./_lib/agents');
 const { hasPermission } = require('./_lib/rbac');
@@ -225,7 +225,7 @@ module.exports=async function handler(req,res){
   let problems=null;
   try{
    if(cron)problems=await autoResolve();
-   else{const found=await detect(actor);problems={detectados:found.resumo.total,incidents:await persistIncidents(found,overview.generatedAt)}}
+   else{const found=await detect(actor);problems={detectados:found.resumo.total,incidents:await persistIncidents(found,overview.generatedAt),probes:await persistProbes(found.fontes,overview.generatedAt)}}
   }catch(e){problems={erro:e?.message||'Falha na Central de Problemas.'}}
   if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:{...result,problems}});
   return json(res,200,{ok:true,result,problems,overall:overview.overall,signals:overview.signals});

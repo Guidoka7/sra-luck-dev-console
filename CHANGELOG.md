@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0 — Visão Geral operacional
+
+- Visão Geral refeita sobre as fontes existentes (sem tela nova): estado geral em uma linha, saúde de App, Admin, API/Worker, Supabase, Storage, Vercel e Cloudflare com drawer por componente (o que está acontecendo, medições, problemas relacionados, link para a página certa);
+- incidentes e alertas com contexto, impacto e ação recomendada (Central de Problemas, incidentes de infraestrutura, CI da main, deploy de produção com erro, produção atrás da main);
+- histórico real em gráficos: latência dos fluxos, erros do App/Admin/API por período e recursos do banco e do Worker, com aviso honesto quando há poucas leituras;
+- fluxos críticos testados de verdade, com drawer das etapas;
+- últimas alterações: deploys, commits, CI e migrations, e se a produção roda o mesmo código da main;
+- latência de cada fluxo passa a ser gravada no histórico (`source=probe`) em toda varredura;
+- `GET /api/github-status?resource=changes`;
+- varredura horária gratuita opcional via GitHub Actions (`.github/workflows/guardian-scan.yml`, secrets `DEV_CONSOLE_URL` e `CRON_SECRET`);
+- gráficos: escala do eixo Y em passos redondos, margem que não corta rótulos e contagens sem casas decimais;
+- Visão Geral mais enxuta: "Serviços essenciais" e "Funções espelhadas do Admin" viraram "Saúde por componente"; "Atenção necessária" virou "Incidentes e alertas"; "Domínios de manutenção" e "Atividade recente" (listas sem ação direta) saíram — seguem em Central de Problemas, Agentes e Auditoria.
+
 ## 0.5.0 — Central Inteligente de Notificações (etapa 1)
 
 - Notificações: drawer da Central com as abas Operação, Chat Gemini, Regras financeiras, Agenda/jornada/eventos, Relatórios, Configurações e Auditoria, sobre `/api/admin/notificacoes/lotes*` do Sra Luck (Guidoka7/sra-luck-react#59);

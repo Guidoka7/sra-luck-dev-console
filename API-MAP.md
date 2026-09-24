@@ -17,7 +17,8 @@
 - `GET /api/dev-status`
 - `GET /api/dev-health`
 - `GET /api/dev-ready`
-- `GET /api/github-status?resource=summary|overview|branches|workflows` — `code.view`
+- `GET /api/github-status?resource=summary|overview|branches|workflows|changes` — `code.view`
+  - `changes`: últimos commits e CI da main do Sra Luck, migrations presentes no repositório (a aplicação no banco é manual e não é afirmada), deploys da Vercel e `sincronia` (`sincronizado` | `producao_atras` com `commitsAtras` | `divergente` | `desconhecido` + `motivo`). Usado pela Visão Geral.
 - `POST /api/github-status` `{ action: rerun_failed|merge_pr|create_pr|dispatch_workflow|redeploy|promote, repo: sra|console, ... }` — `releases.manage` (developer/owner), auditado
 
 ### Proxy
@@ -73,7 +74,7 @@ Só HTTPS público (endereços privados/internos bloqueados, sem seguir redireci
 - `GET /api/infra-supabase?hours=1|6|24` — métricas + erros do Supabase Sra Luck
 - `GET /api/infra-dev-supabase` — saúde/métricas do Supabase próprio do Dev Console
 - `GET /api/infra-history?source=&metric=&hours=` — histórico persistido de recursos
-- `GET /api/infra-history?series=fonte:metrica,...&hours=` — várias séries de uma vez (até 16), usado pelos gráficos de memória
+- `GET /api/infra-history?series=fonte:metrica,...&hours=` — várias séries de uma vez (até 16), usado pelos gráficos de memória e pela Visão Geral (`probe:<fluxo>` = latência real de cada fluxo testado, em ms, gravada a cada varredura)
 - `GET /api/infra-cloudflare` — Worker CPU/memory/request/error metrics
 - `GET /api/infra-vercel` — deploys Vercel + runtime atual
 - `GET /api/infra-runtime` — memória do runtime atual do Dev Console
