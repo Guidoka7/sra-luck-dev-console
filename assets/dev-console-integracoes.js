@@ -3,8 +3,9 @@
   // (GET /api/admin/integrations/catalogo): credenciais mascaradas, funções com situação real,
   // origem/destino, mapeamento, sincronização, webhooks, histórico e regras. O formulário de
   // cada função é gerado pela descrição de campos do catálogo.
-  // Escritas daqui: configuração não secreta (Gemini e importação do CRM) e "Importar agora"
-  // do CRM. Conta Azul é só leitura: ações financeiras e segredos ficam no Admin do Sra Luck.
+  // Escritas daqui: configuração das funções catalogadas. As credenciais secretas são
+  // gerenciadas pela camada de edição do Dev Console e permanecem cifradas no Sra Luck.
+  // A operação financeira diária da Conta Azul continua no Admin; sua configuração é do Dev.
   const esc = (v) => DC.esc(v == null ? '' : String(v));
   const SITUACAO = { disponivel: ['Disponível', 'ok'], api_permite: ['API permite · não implementado', 'warn'], api_nao_permite: ['API não permite', 'neutral'] };
   const DIRECAO = { entrada: 'Entrada', saida: 'Saída', bidirecional: 'Bidirecional', interna: 'Interna' };
@@ -13,8 +14,9 @@
     mensagem_diaria: ['Instruções de estilo', 'Substitui as instruções de estilo padrão da mensagem diária. Em branco, usa o padrão.'],
     notificacoes: ['Orientação extra de tom', 'Somada às regras fixas de segurança (sem CPF, sem inventar valores). Não substitui essas regras.'],
   };
-  // Mesma lista da guarda M2M do Sra Luck (worker/dev-console-auth.ts).
-  const EDITAVEL_AQUI = new Set(['gemini.mensagem_diaria', 'gemini.notificacoes', 'rd_station.importacao']);
+  // Toda função que o catálogo marca como configurável é editável pelo Dev.
+  // O backend continua sendo a autoridade: valida esquema, versão e permissões.
+  const EDITAVEL_AQUI = null;
   const OPCOES_URL = { rd_station: '/api/admin/integrations/rd-station/opcoes', conta_azul: '/api/admin/integrations/conta-azul/opcoes' };
   const S = { catalogo: null, erro: null, aba: null, opcoes: {} };
 
@@ -25,7 +27,7 @@
     return S.catalogo;
   }
   const integracao = (id) => (S.catalogo?.integracoes || []).find((i) => i.id === id) || null;
-  const podeConfigurar = () => ['owner', 'developer'].includes(String(DC.currentUser?.role || '').toLowerCase());
+  const podeConfigurar = () => Boolean(DC.currentUser);
   const chip = (s) => DC.chip(...(SITUACAO[s] || [s, 'neutral']));
   const quando = (v) => (v ? DC.dateTimeFmt.format(new Date(v)) : '—');
 
@@ -80,11 +82,11 @@
   }
 
   function formHtml(i, f, op) {
-    const chave = `${i.id}.${f.id}`, editavelAqui = EDITAVEL_AQUI.has(chave), pode = editavelAqui && podeConfigurar(), dis = pode ? '' : ' disabled';
+    const editavelAqui = Boolean(f.config), pode = editavelAqui && podeConfigurar(), dis = pode ? '' : ' disabled';
     const c = f.config || {}, campos = f.campos || [];
     const uso = campos.some((x) => x.chave === 'limiteDiario') ? (c.limiteDiario ? `${f.usoHoje}/${c.limiteDiario} chamadas hoje` : `${f.usoHoje} chamada(s) hoje · sem limite`) : '';
-    const rodape = !editavelAqui ? '<small class="dc-muted">Configuração financeira: altere no Admin do Sra Luck → Integrações.</small>'
-      : pode ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Só owner/developer podem alterar.</small>';
+    const rodape = !editavelAqui ? '<small class="dc-muted">Esta função não possui parâmetros configuráveis.</small>'
+      : pode ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Seu acesso não permite alterar.</small>';
     return `<form class="dc-ip-form" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
       ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)}</div>` : ''}
       ${uso ? `<small class="dc-muted">${esc(uso)}</small>` : ''}
@@ -166,7 +168,7 @@
     if (!p.ok) { alvo.innerHTML = `<div class="dc-warn-box">${esc(p.error || 'Painel da Conta Azul indisponível.')}</div>`; return; }
     const d = p.data, c = d.conexao || {}, v = d.vinculos || {}, fl = d.fila || {};
     const n = (x) => (x == null ? '—' : x);
-    alvo.innerHTML = `<div class="dc-note">Só leitura. Sincronizar, resolver conflitos, reprocessar a fila e enviar parcelas são ações financeiras: ficam no Admin do Sra Luck → Integrações.</div>
+    alvo.innerHTML = `<div class="dc-note">A operação financeira diária continua no Admin. Credenciais, OAuth e parâmetros de sincronização são configurados pelo Dev Console.</div>
       ${!d.estruturaAplicada ? '<div class="dc-warn-box" style="margin-top:8px">Estrutura de sincronização ainda não aplicada no Sra Luck (migration_091).</div>' : ''}
       <div class="dc-ip-kpis" style="margin-top:8px">
         <div><small>OAuth</small><b>${c.autorizada ? 'Conectada' : c.tokenManual ? 'Token manual' : c.clientConfigurado ? 'Aguardando' : 'Sem Client ID'}</b></div>
@@ -191,7 +193,7 @@
     const disp = i.funcoes.filter((f) => f.situacao === 'disponivel').length;
     const extras = EXTRAS[id] || [];
     const abas = [
-      ['visao', 'Visão', `${partes.topo}${partes.extras || ''}<h3 class="dc-nc-h">Credenciais</h3>${partes.credenciais}<div class="dc-note" style="margin-top:6px">Segredos ficam no cofre cifrado do Sra Luck e são editados no Admin → Integrações. Aqui aparecem só a origem e a máscara.</div>
+      ['visao', 'Visão', `${partes.topo}${partes.extras || ''}<h3 class="dc-nc-h">Credenciais</h3>${partes.credenciais}<div class="dc-note" style="margin-top:6px">Segredos ficam no cofre cifrado do Sra Luck. O Dev Console grava novos valores, mas nunca recebe o segredo atual em texto puro.</div>
         <h3 class="dc-nc-h">Resumo</h3><p class="dc-ov-p">${disp} de ${i.funcoes.length} funções disponíveis · ${i.funcoes.filter((f) => f.situacao === 'api_permite').length} que a API permite e ainda não foram feitas · ${i.funcoes.filter((f) => f.situacao === 'api_nao_permite').length} que a API não permite.</p>`],
       ['funcoes', `Funções (${i.funcoes.length})`, abaFuncoes(i)],
       ...extras.map(([k, l]) => [k, l, `<div data-extra="${k}"><div class="dc-muted">Carregando…</div></div>`]),
