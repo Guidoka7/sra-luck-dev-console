@@ -342,8 +342,9 @@ async function detect(actor) {
 
 // Registro fechado de correções. O cliente só escolhe o id; rota e corpo são daqui.
 const ACTIONS = {
-  'notificacoes.verificar_atrasos': { permissao: 'notifications.manage', seguro: true, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_atrasos' }, ...ctx }) },
-  'notificacoes.verificar_vencimentos': { permissao: 'notifications.manage', seguro: true, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_momentos_especiais' }, ...ctx }) },
+  // Cobrança financeira nunca roda sozinha: exige confirmação humana (sem autoResolve).
+  'notificacoes.verificar_atrasos': { permissao: 'notifications.manage', seguro: false, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_atrasos' }, ...ctx }) },
+  'notificacoes.verificar_vencimentos': { permissao: 'notifications.manage', seguro: false, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_momentos_especiais' }, ...ctx }) },
   'integracoes.testar': {
     permissao: 'integrations.manage', seguro: true,
     run: async (ctx, prob) => {
