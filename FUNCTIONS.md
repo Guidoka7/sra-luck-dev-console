@@ -93,7 +93,7 @@ Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funçõ
 
 - **Notificações** (`notificacoes.html`): ligar/desligar o lembrete de atraso, frequência, máximo de tentativas, criar/editar/ativar templates, envio manual para uma cliente e envio forçado de atrasos.
 - **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
-- **Integrações** (`integracoes.html`): testes de conexão e teste/sincronização do RD Station. Credenciais e chaves VAPID continuam sendo editadas no Admin.
+- **Integrações** (`integracoes.html` + `assets/dev-console-integracoes.js`): padrão por integração montado do catálogo do Sra Luck (funções com situação real, origem/destino, mapeamento, sincronização, webhooks, histórico, regras e limites), testes de conexão, teste/sincronização do RD Station e configuração por função do Gemini. Credenciais e chaves VAPID continuam sendo editadas no Admin.
 
 ## Carrossel do App
 

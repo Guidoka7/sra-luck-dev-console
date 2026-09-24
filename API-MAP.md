@@ -65,6 +65,13 @@ Mora em `api/infra-scan.js` (`mode=problems`) por causa do limite de Functions d
 - `GET /api/agentes` — resumo do dia, agentes, novidades boas e ruins, correções recentes (`monitoring.view`)
 - `POST /api/agentes` `{ action: "analisar", problema }` — análise por IA do problema (Gemini, opcional)
 
+## Padrão de integrações (via proxy do Sra Luck)
+
+- `GET /api/sra-proxy?path=/api/admin/integrations/catalogo` — registro de cada integração do Sra Luck (`worker/integracoes-registro.ts`): credenciais (só chave, rótulo e obrigatoriedade, nunca valores), funções com situação real (`disponivel`, `api_permite`, `api_nao_permite` + motivo), origem e destino, mapeamento de campos, modos de sincronização, webhooks de entrada/saída, limites e regras; funções configuráveis trazem `config`, `versao`, `atualizadoEm` e `usoHoje` (`integrations.view`).
+- `POST /api/sra-proxy?path=/api/admin/integrations/config` `{ provedor, funcao, config, versao }` — grava a configuração **não secreta** de uma função (hoje: Gemini `mensagem_diaria` e `notificacoes`: `ativo`, `modelo`, `prompt`, `temperatura`, `maxTokens`, `limiteDiario`). Versão otimista (409 em conflito) e auditoria no Sra Luck. Dev Console: `integrations.manage`; guarda M2M do Sra Luck: só owner/developer e só essas chaves.
+- Sem o catálogo em produção (404), `integracoes.html` avisa e abre o drawer no formato anterior.
+- Segredos continuam só no cofre cifrado do Sra Luck, editados no Admin; o Dev Console mostra origem e máscara.
+
 ## APIs personalizadas
 
 - `GET /api/custom-apis` (`?check=1` testa todas) — `integrations.view`

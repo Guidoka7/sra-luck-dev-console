@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0 — Padrão de integrações
+
+- o drawer de cada integração passa a ser montado a partir do catálogo do Sra Luck (`GET /api/admin/integrations/catalogo`), com as abas Visão (credenciais mascaradas, status, teste de conexão), Funções, Dados e mapeamento, Sincronização, Webhooks, Histórico e Regras e limites; integração nova entra no registro do Sra Luck, sem mudar o Dev Console;
+- cada função mostra a situação real: disponível, "API permite · não implementado" ou "API não permite", com o motivo (ex.: Conta Azul sem webhooks e sem cancelamento pela API);
+- Gemini configurável por função (mensagem diária e notificações): liga/desliga, modelo, prompt/base, temperatura, máx. tokens e limite diário com o uso de hoje; só owner/developer editam, com versão e auditoria no Sra Luck;
+- a conversa da mensagem diária continua no botão "Conversar sobre a mensagem diária";
+- sem o catálogo em produção, aviso na página e drawer no formato anterior.
+
 ## 0.9.1 — Deploy Cloudflare
 
 - `wrangler.jsonc`: publica só `dist/` (antes, sem configuração, o Wrangler usava a raiz e tentava enviar `node_modules`, falhando com "Asset too large");

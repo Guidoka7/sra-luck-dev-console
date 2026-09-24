@@ -317,3 +317,28 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}b
 .dc-ic-days i.ok{background:var(--green)}.dc-ic-days i.warn{background:var(--yellow)}.dc-ic-days i.bad{background:var(--red)}
 .dc-ov-tl li.nota::before{background:#baa7ff}
 @media(max-width:760px){.dc-ic-bar{align-items:flex-start}.dc-ic-estab th:nth-child(4),.dc-ic-estab td:nth-child(4){display:none}}
+/* Padrão de integração */
+.dc-ip-fn{border:1px solid var(--line2);border-left:3px solid var(--green);border-radius:10px;padding:10px 12px;background:#0b1928;margin-bottom:8px}
+.dc-ip-fn.api_permite{border-left-color:var(--yellow)}.dc-ip-fn.api_nao_permite{border-left-color:#4a6078;opacity:.92}
+.dc-ip-fn header{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dc-ip-fn header strong{font-size:11px;margin-right:auto}
+.dc-ip-fn p{margin:5px 0 0;font-size:10px;line-height:1.5;color:#c4d4e4}
+.dc-ip-fn p.dc-ip-motivo{color:var(--soft);font-size:9.4px}
+.dc-ip-form{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line2);display:grid;gap:8px}
+.dc-ip-toggle{display:flex;align-items:center;gap:8px;font-size:10px}
+.dc-ip-toggle small{margin-left:auto;color:var(--soft)}
+.dc-ip-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.dc-ip-grid label,.dc-ip-full{display:grid;gap:4px;font-size:9.2px;color:var(--soft)}
+.dc-ip-grid input,.dc-ip-full textarea{border:1px solid var(--line);background:#081422;color:var(--ink);border-radius:8px;padding:6px 8px;font:inherit;font-size:10px;min-width:0}
+.dc-ip-full textarea{resize:vertical;min-height:52px}
+.dc-ip-full small{font-size:8.8px;color:var(--muted)}
+.dc-ip-form footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.dc-ip-form input:disabled,.dc-ip-form textarea:disabled{opacity:.6}
+.dc-ip-list{display:grid;gap:6px}
+.dc-ip-row{display:grid;grid-template-columns:100px minmax(0,1fr) auto;gap:10px;align-items:start;padding:8px 10px;border:1px solid var(--line2);border-radius:9px;background:#0b1928;font-size:10px}
+.dc-ip-row b{font-size:10px}
+.dc-ip-row span{display:grid;gap:3px;color:#c4d4e4;line-height:1.45}
+.dc-ip-row small{color:var(--soft);font-size:9px}
+.dc-ip-row code{font-size:9px;color:#9ecbff;overflow-wrap:anywhere}
+.dc-ip-ul{margin:0 0 6px;padding-left:18px;font-size:10px;line-height:1.6;color:#c4d4e4}
+@media(max-width:760px){.dc-ip-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-ip-row{grid-template-columns:1fr}}
