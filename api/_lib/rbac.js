@@ -13,11 +13,11 @@ const ROLE_PERMISSIONS = {
   operator: [
     'monitoring.view','infrastructure.view','incidents.manage','agents.run','jobs.view','v46.inspect','v46.correct',
     'finance.inspect','finance.correct','app.inspect','app.correct','notifications.view','notifications.manage',
-    'integrations.view','sra.staff.view','audit.view','connectors.view'
+    'integrations.view','integrations.manage','agents.configure','sra.staff.view','audit.view','connectors.view'
   ],
   viewer: [
     'monitoring.view','infrastructure.view','jobs.view','v46.inspect','finance.inspect','app.inspect','notifications.view',
-    'integrations.view','sra.staff.view','code.view','releases.view','audit.view','connectors.view'
+    'integrations.view','integrations.manage','notifications.manage','agents.configure','sra.staff.view','code.view','releases.view','audit.view','connectors.view'
   ],
 };
 
