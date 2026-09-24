@@ -293,10 +293,30 @@
       const s = l.contagem?.porStatus || {};
       return `<tr class="${l.id === st.loteId ? 'dc-row-active' : ''}" data-lote="${esc(l.id)}" style="cursor:pointer"><td>${quando(l.created_at)}</td><td>${chipLote(l.status)}</td><td>${l.contagem?.elegiveis ?? 0}</td><td>${s.PROVIDER_ACCEPTED || 0}</td><td>${s.IN_APP_ONLY || 0}</td><td>${s.FAILED || 0}</td><td>${s.SKIPPED_DEDUPLICATION || 0}</td><td>${s.SKIPPED_RULE || 0}</td><td>${esc(l.aprovado_por || '—')}</td><td class="dc-soft">${esc(l.modelo || '—')} ${esc(l.prompt_version || '')}</td></tr>`;
     }).join('')}</tbody></table></div>
-      ${d ? `<h3 class="dc-nc-h">Por cliente · lote de ${quando(d.lote.created_at)}${d.duracaoMs != null ? ` · envio levou ${Math.round(d.duracaoMs / 1000)}s` : ''}</h3>
+      ${d ? `<div class="dc-nc-explain"><div class="dc-toolbar"><button class="dc-btn" data-act="explicar">Explicar este lote</button><span class="dc-soft">O Gemini só resume os números gravados deste lote; se citar algo fora deles, o resumo é descartado.</span></div>${explicacaoHtml()}</div>
+      <h3 class="dc-nc-h">Por cliente · lote de ${quando(d.lote.created_at)}${d.duracaoMs != null ? ` · envio levou ${Math.round(d.duracaoMs / 1000)}s` : ''}</h3>
       <div class="dc-filter-chips">${filtros.map((f) => `<button class="dc-btn ${st.filtro === f ? 'primary' : ''}" data-filtro="${f || ''}">${f ? (ITEM[f] || [f])[0] : 'Todas'}</button>`).join('')}</div>
       ${tabelaClientes(itens)}
       <div class="dc-note" style="margin-top:6px">“Push aceito” quer dizer que o serviço de push recebeu a mensagem, <b>não</b> que a cliente viu. Abertura e clique ainda não são registrados pelo app.</div>` : ''}`;
+  }
+
+  const ROTULOS_FATOS = [['clientesAnalisadas', 'Clientes analisadas'], ['elegiveis', 'Elegíveis'], ['comMaisDeUmaParcela', 'Com 2+ parcelas (1 mensagem)'], ['aceitasPeloProvedor', 'Push aceito'], ['somenteNoApp', 'Só no app'], ['falhas', 'Falhas'], ['deduplicadas', 'Deduplicadas'], ['foraDaRegra', 'Fora da regra'], ['semMensagem', 'Sem mensagem']];
+  function explicacaoHtml() {
+    const e = st.explicacao;
+    if (!e || e.loteId !== st.loteId) return '';
+    if (e.carregando) return '<div class="dc-empty">Pedindo o resumo ao Gemini…</div>';
+    const fatos = e.fatos ? `<div class="dc-nc-kpis">${ROTULOS_FATOS.filter(([k]) => e.fatos[k] != null).map(([k, n]) => `<div><small>${esc(n)}</small><b>${Number(e.fatos[k])}</b></div>`).join('')}</div>${Object.keys(e.fatos.motivos || {}).length ? `<div class="dc-list">${Object.entries(e.fatos.motivos).map(([m, q]) => `<div class="dc-row" style="grid-template-columns:1fr auto"><span>${esc(motivo(m))}</span><b>${Number(q)}</b></div>`).join('')}</div>` : ''}` : '';
+    const texto = e.ok ? `<div class="dc-nc-msg gemini" style="max-width:100%"><small>Gemini · resumo validado</small>${esc(e.texto)}</div>` : `<div class="dc-nc-msg erro" style="max-width:100%"><small>Sem resumo</small>${esc(e.erro)}</div>`;
+    return `${texto}${fatos ? `<h3 class="dc-nc-h">Fatos gravados do lote</h3>${fatos}` : ''}`;
+  }
+
+  async function explicar() {
+    if (!st.loteId) return;
+    st.explicacao = { loteId: st.loteId, carregando: true };
+    render();
+    const r = await DC.api(`${BASE}/${st.loteId}/explicar`, { method: 'POST', body: {}, timeout: 45000 });
+    st.explicacao = r.ok ? { loteId: st.loteId, ok: true, texto: r.data.texto, fatos: r.data.fatos } : { loteId: st.loteId, ok: false, erro: explicarFalha(r), fatos: r.data?.fatos || null };
+    render();
   }
 
   function tabConfig() {
@@ -399,6 +419,7 @@
       if (act === 'recalcular') return recalcular();
       if (act === 'reprocessar') return reprocessar();
       if (act === 'salvar-config') return salvarConfig();
+      if (act === 'explicar') return explicar();
     });
     ov.addEventListener('change', (e) => { const s = e.target.dataset?.segToggle; if (s) salvarFaixa(s, e.target.checked); });
     ov.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'ncChatIn') { e.preventDefault(); ov.querySelector('[data-chat-send]')?.click(); } });
