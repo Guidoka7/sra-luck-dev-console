@@ -38,10 +38,10 @@
       </div>`;
     }).join('');
 
-    return `<div class="dc-note"><b>Credenciais gerenciadas pelo Dev.</b> Valores existentes aparecem somente mascarados. Segredos novos são enviados uma vez e permanecem cifrados no Sra Luck.</div>
+    return `<div class="dc-note"><b>Credenciais gerenciadas pelo Dev.</b> Valores existentes aparecem somente mascarados. Salvar ou remover qualquer credencial invalida a ativação anterior; o status só volta a Conectada depois de uma validação real.</div>
       <div class="dc-row" style="grid-template-columns:1fr auto;margin-top:8px">
-        <div><strong>Integração ${p.ativo === false ? 'pausada' : 'ativa'}</strong><div class="dc-muted">Pausar faz o backend deixar de entregar estas credenciais às rotinas.</div></div>
-        <label class="dc-switch"><input type="checkbox" ${p.ativo === false ? '' : 'checked'} onchange="DCIntegrationEditor.toggleProvider('${id}',this.checked,this)"/><span></span></label>
+        <div><strong>${p.ativo === true ? 'Integração ativa e validada' : 'Integração desativada / requer validação'}</strong><div class="dc-muted">${p.ativo === true ? 'O backend já aprovou a ativação desta configuração.' : 'Ativar executa uma chamada real ao provedor. Se a autenticação falhar, permanece desligada.'}</div></div>
+        <label class="dc-switch" title="${p.ativo === true ? 'Desativar integração' : 'Validar no provedor e ativar'}"><input type="checkbox" ${p.ativo === true ? 'checked' : ''} onchange="DCIntegrationEditor.toggleProvider('${id}',this.checked,this)"/><span></span></label>
       </div>
       <div class="dc-ip-credentials" style="margin-top:8px">${campos || '<div class="dc-empty">Sem campos de credencial.</div>'}</div>`;
   }
@@ -80,7 +80,7 @@
     if (!valor) return DC.toast('Informe o valor da credencial.', true);
     const r = await DC.action(btn, () => DC.api('/api/admin/integrations/credenciais', {
       method: 'POST', body: { provedor: id, chave, valor }
-    }), { success: 'Credencial salva no cofre do Sra Luck.' });
+    }), { success: 'Credencial salva. A integração foi desativada até nova validação real.' });
     if (r?.ok) { if (input) input.value = ''; await refreshAndReopen(id); }
   }
 
@@ -88,16 +88,24 @@
     if (!await DC.modal('Remover credencial', '<div class="dc-warn-box">Remove somente o valor salvo no cofre. Se existir uma variável de ambiente para este campo, ela volta a ser usada como fallback.</div>', { confirmText: 'Remover', danger: true })) return;
     const r = await DC.action(btn, () => DC.api('/api/admin/integrations/credenciais', {
       method: 'POST', body: { provedor: id, chave, remover: true }
-    }), { success: 'Credencial removida do cofre.' });
+    }), { success: 'Credencial removida. A integração foi desativada e precisa ser revalidada.' });
     if (r?.ok) await refreshAndReopen(id);
   }
 
   async function toggleProvider(id, ativo, input) {
     input.disabled = true;
-    const r = await DC.api('/api/admin/integrations/credenciais', { method: 'POST', body: { provedor: id, ativo } });
+    const endpoint = '/api/admin/integrations/estado';
+    const r = await DC.api(endpoint, { method: 'POST', body: { provedor: id, ativo }, timeout: 30000 });
     input.disabled = false;
-    if (!r.ok) { input.checked = !ativo; return DC.toast(r.error || r.data?.erro || 'Falha ao alterar a integração.', true); }
-    DC.toast(ativo ? 'Integração ativada.' : 'Integração pausada.');
+    if (!r.ok) {
+      input.checked = !ativo;
+      const detalhe = r.data?.resultado?.detalhe || r.data?.erro || r.error || 'Falha ao alterar a integração.';
+      DC.toast(detalhe, true);
+      await refreshAndReopen(id);
+      return;
+    }
+    const detalhe = r.data?.resultado?.detalhe;
+    DC.toast(ativo ? `Integração validada e ativada.${detalhe ? ' ' + detalhe : ''}` : 'Integração desativada.');
     await refreshAndReopen(id);
   }
 
@@ -152,7 +160,7 @@
       return;
     }
     const ev = I.history.filter((h) => h.entidade_id === id || h.detalhes?.provedor === id).slice(0,15).map(historyRow).join('') || '<div class="dc-empty">Sem eventos registrados.</div>';
-    const topo = `<div class="dc-int-top" style="margin-bottom:10px">${logo(x.id,x.nome)}<div><strong>${esc(x.nome)}</strong><small>${esc(GROUPS[x.grupo] || x.grupo)}</small></div>${DC.chip(...(STATE[stateOf(x)] || [x.estado,'neutral']))}</div><div class="dc-note">${esc(x.detalhes || '')}</div>`;
+    const topo = `<div class="dc-int-top" style="margin-bottom:10px">${logo(x.id,x.nome)}<div><strong>${esc(x.nome)}</strong><small>${esc(GROUPS[x.grupo] || x.grupo)}</small></div>${DC.chip(...(STATE[stateOf(x)] || [stateOf(x),'neutral']))}</div><div class="dc-note">${esc(x.detalhes || '')}</div><div class="dc-ip-kpis" style="margin-top:8px"><div><small>Ativação</small><b>${x.ativo ? 'Ativa' : 'Desativada'}</b></div><div><small>Último teste</small><b>${x.ultimaVerificacao ? DC.relTime(x.ultimaVerificacao) : 'nunca'}</b></div><div><small>Latência</small><b>${x.latenciaMs != null ? x.latenciaMs + ' ms' : '—'}</b></div><div><small>Código</small><b>${esc(x.codigoValidacao || '—')}</b></div></div>`;
     const extras = id === 'web_push' && I.vapid
       ? `${DC.field('VAPID configurado', I.vapid.configurado ? 'Sim' : 'Não')}${DC.field('Validado', I.vapid.validado ? 'Sim' : 'Não')}${DC.field('Aparelhos inscritos', I.vapid.assinaturas ?? '—')}`
       : '';
