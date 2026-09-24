@@ -22,6 +22,8 @@ Auditoria feita sobre `Guidoka7/sra-luck-react@main` (`20bec0f`) e este reposit�
 
 ## 2. Problemas encontrados (reais, no código de hoje)
 
+> Atualização: a `main` já corrigiu os itens 1–3 direto na rotina automática — `e208798` (uma mensagem por cliente, elegibilidade `boletoPodeReceberCobrancaAutomatica`: só `nao_pago`, sem parcela suspensa, cliente ativa e contrato válido) e `8402947`/`ce002c6` (data civil de Brasília). A Central de lotes (#59) usa exatamente essa mesma regra e a mesma data civil; o que ela acrescenta é aprovação, Gemini validado, horário silencioso, status por cliente e relatório.
+
 1. **Uma notificação por parcela.** Três parcelas em aberto = três notificações no mesmo dia.
 2. **Cobra quem já enviou comprovante.** O filtro é `status != 'pago'`, então parcelas `pendente_confirmacao` (comprovante em conferência) também recebem cobrança.
 3. **Data em UTC.** `new Date().toISOString().slice(0,10)` vira "amanhã" depois das 21h em Brasília, e a régua erra um dia.
