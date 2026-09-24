@@ -35,6 +35,10 @@ Este documento registra o roadmap acordado para o novo control plane.
 
 A inteligência/execução 24x7 deve ficar server-side. O Dev Console é o control plane: autentica, visualiza, autoriza, aciona e audita. O `sra-luck-react` continua sendo a fonte de verdade das regras de negócio.
 
+## Central de Problemas — IMPLEMENTADA
+
+Primeira versão combinada de System Health, Incident Manager, Notification Delivery, V46 Journey Guardian (detecção), Financial Integrity (fila de validação) e App Experience. Autonomia: L2 só para testes de integração; L3 (confirmação humana) para rotinas de notificação de cobrança e liberação de acesso ao app; link para decisões de V46 e financeiro.
+
 ## Infrastructure & Resource Guardian — IMPLEMENTADO NA BASE V1
 
 Responsabilidade: observar recursos e diferenciar falha de código de pressão de infraestrutura.

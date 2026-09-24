@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Sra Luck · Dev Console · Infraestrutura</title><script src="assets/dev-console-icons.js"></script><link href="assets/dev-console.css" rel="stylesheet"/></head><body>
-<div class="dc-app"><aside class="dc-side"><div class="dc-brand"><div class="dc-brandmark"><i data-lucide="wrench"></i></div><div><div class="dc-brand-title">Sra Luck</div><div class="dc-brand-sub">Dev Console</div></div></div><nav class="dc-nav"><a href="visao-geral.html"><i data-lucide="layout-dashboard"></i>Visão Geral</a><a href="incidentes.html"><i data-lucide="bug"></i>Incidentes<span class="nav-badge" id="navBadge-incidentes" style="display:none"></span></a><a href="sistema.html"><i data-lucide="heart-pulse"></i>Sistema Sra Luck</a><a class="active" href="infraestrutura.html"><i data-lucide="server"></i>Infraestrutura</a><a href="notificacoes.html"><i data-lucide="bell"></i>Notificações</a><a href="codigo-releases.html"><i data-lucide="git-branch"></i>Releases</a><a href="dev-acessos.html"><i data-lucide="shield-check"></i>Acessos</a><a href="conexoes.html"><i data-lucide="plug-zap"></i>Conexões</a></nav><div class="dc-env"><div class="dc-env-row"><span class="dc-dot"></span><div><small>Objetivo</small><strong>Manutenção</strong></div></div><div class="dc-env-foot">Monitorar · diagnosticar · corrigir<br/>Detalhes técnicos só quando necessários.</div></div></aside>
+<div class="dc-app"><aside class="dc-side"><div class="dc-brand"><div class="dc-brandmark"><i data-lucide="wrench"></i></div><div><div class="dc-brand-title">Sra Luck</div><div class="dc-brand-sub">Dev Console</div></div></div><nav class="dc-nav"><a href="visao-geral.html"><i data-lucide="layout-dashboard"></i>Visão Geral<span class="nav-badge" id="navBadge-visao-geral" style="display:none"></span></a><a href="agentes.html"><i data-lucide="bot"></i>Agentes<span class="nav-badge" id="navBadge-agentes" style="display:none"></span></a><a href="problemas.html"><i data-lucide="wrench"></i>Central de Problemas<span class="nav-badge" id="navBadge-problemas" style="display:none"></span></a><a href="sistema.html"><i data-lucide="heart-pulse"></i>Admin Sra Luck<span class="nav-badge" id="navBadge-sistema" style="display:none"></span></a><a href="notificacoes.html"><i data-lucide="bell"></i>Notificações<span class="nav-badge" id="navBadge-notificacoes" style="display:none"></span></a><a href="integracoes.html"><i data-lucide="workflow"></i>Integrações<span class="nav-badge" id="navBadge-integracoes" style="display:none"></span></a><a class="active" href="infraestrutura.html"><i data-lucide="server"></i>Infraestrutura<span class="nav-badge" id="navBadge-infraestrutura" style="display:none"></span></a><a href="engenharia.html"><i data-lucide="git-branch"></i>Engenharia<span class="nav-badge" id="navBadge-engenharia" style="display:none"></span></a><a href="dev-acessos.html"><i data-lucide="shield-check"></i>Acessos<span class="nav-badge" id="navBadge-dev-acessos" style="display:none"></span></a><a href="conexoes.html"><i data-lucide="plug-zap"></i>Conexões<span class="nav-badge" id="navBadge-conexoes" style="display:none"></span></a></nav><div class="dc-env"><div class="dc-env-row"><span class="dc-dot"></span><div><small>Objetivo</small><strong>Manutenção</strong></div></div><div class="dc-env-foot">Monitorar · diagnosticar · corrigir<br/>Detalhes técnicos só quando necessários.</div></div></aside>
 <main class="dc-main"><header class="dc-top"><div class="dc-search"><i data-lucide="search"></i><input id="dcSearch" placeholder="Buscar módulo, incidente ou ferramenta…"/><span class="dc-kbd">⌘ K</span></div><div class="dc-user"><button class="dc-icon-btn" id="dcHelp" title="Ajuda"><i data-lucide="circle-help"></i></button><button class="dc-icon-btn" onclick="DC.openApiInspector()" title="Inspector de API"><i data-lucide="network"></i></button><button class="dc-btn" id="dcLogin"><i data-lucide="log-out"></i> Sair</button><div class="dc-avatar" id="dcAvatar">DV</div><div class="dc-usercopy"><b id="dcUserName">Dev Console</b><br/><span id="dcUserRole">validando sessão…</span></div></div></header>
 <div class="dc-content"><div class="dc-alertbar" id="dcBanner"></div>
 <div class="dc-head"><div><h1>Infraestrutura</h1><p>Mostra primeiro o que precisa de ação. Métricas técnicas ficam em segundo plano.</p></div><div class="dc-head-meta"><span id="dcNow"></span><br/><span class="dc-live" id="dcTopStatus">Carregando…</span></div></div>
@@ -21,11 +21,9 @@
  <section class="dc-card dc-section"><div class="dc-section-head"><div class="dc-title"><i data-lucide="list-checks"></i><div><h2>O que fazer agora</h2><p>Próxima ação sugerida pelo estado atual.</p></div></div></div><div id="nextAction" class="dc-next-action"></div></section>
 </div>
 
-<section class="dc-card dc-section dc-history-card">
- <div class="dc-section-head"><div class="dc-title"><i data-lucide="line-chart"></i><div><h2>Histórico</h2><p>Escolha um sinal. Se ainda houver poucas leituras, o painel informa claramente.</p></div></div><button class="dc-btn" id="collectPointBtn">Coletar ponto agora</button></div>
- <div id="historyTabs" class="dc-history-tabs"></div>
- <div id="historyMeta" class="dc-history-meta"></div>
- <div id="historyChart" class="dc-history-visual"></div>
+<section class="dc-card dc-section" id="memorySection">
+ <div class="dc-section-head"><div class="dc-title"><i data-lucide="gauge"></i><div><h2>Memória e recursos</h2><p>Passe o mouse nos gráficos para ver cada leitura. Cada varredura do Guardian registra um ponto.</p></div></div><div class="dc-toolbar"><div class="dc-filter-chips" id="memRange"><button data-h="1">1h</button><button data-h="6">6h</button><button data-h="24" class="active">24h</button><button data-h="168">7 dias</button><button data-h="720">30 dias</button></div><button class="dc-btn" id="collectPointBtn">Coletar ponto agora</button></div></div>
+ <div class="dc-mem-grid" id="memGrid"><div class="dc-empty">Carregando gráficos…</div></div>
 </section>
 
 <details class="dc-card dc-section dc-tech-details">
@@ -34,8 +32,8 @@
 </details>
 </div></main></div>
 
-<script src="assets/dev-console-core.js"></script><script>
-let I={},visibleIssues=[],historySignals=[],selectedHistoryKey='';
+<script src="assets/dev-console-core.js"></script><script src="assets/dev-console-charts.js"></script><script>
+let I={},visibleIssues=[],memHours=24;
 
 const LINKS={
  supabase:'https://supabase.com/dashboard/project/sbohknqapprimtspczio',
@@ -134,55 +132,14 @@ function renderTechnical(p,sra,dev,cf,ve,rt){
  DC.$('technicalGrid').innerHTML='<table class="dc-compact-table"><thead><tr><th>Fonte</th><th>RAM/estado</th><th>Swap/erros</th><th>Disco/requests</th><th>CPU/runtime</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((v,i)=>'<td'+(i===0?' class="dc-tech-source"':'')+'>'+DC.esc(v)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
 }
 
-function renderHistoryTabs(){
- const wrap=DC.$('historyTabs');
- if(!historySignals.length){wrap.innerHTML='<div class="dc-empty">Nenhum sinal com leitura disponível.</div>';DC.$('historyChart').innerHTML='';return}
- wrap.innerHTML=historySignals.map((s,i)=>'<button class="dc-history-tab '+((s.source+'|'+s.key)===selectedHistoryKey?'active':'')+'" onclick="selectHistory('+i+')">'+DC.esc(s.label)+'</button>').join('');
-}
-
-function selectHistory(i){
- const s=historySignals[i];if(!s)return;
- selectedHistoryKey=s.source+'|'+s.key;
- renderHistoryTabs();
- loadHistory();
-}
-
-function historyEmpty(title,desc){
- DC.$('historyMeta').innerHTML='';
- DC.$('historyChart').innerHTML='<div class="dc-history-empty"><i data-lucide="line-chart"></i><strong>'+DC.esc(title)+'</strong><p>'+DC.esc(desc)+'</p><button class="dc-btn primary" onclick="runGuardianFromDrawer()">Coletar leitura agora</button></div>';
- window.lucide&&window.lucide.createIcons();
-}
-
-function renderHistory(points,s){
- const valid=(points||[]).map(x=>({v:Number(x.metric_value),t:x.observed_at,state:x.state})).filter(x=>Number.isFinite(x.v));
- if(!valid.length){historyEmpty('Ainda não há histórico salvo','Execute uma verificação agora. O primeiro ponto será registrado e as próximas leituras formarão a tendência.');return}
- const last=valid[valid.length-1],min=Math.min.apply(null,valid.map(x=>x.v)),max=Math.max.apply(null,valid.map(x=>x.v));
- DC.$('historyMeta').innerHTML='<div class="dc-history-stat"><small>Agora</small><b>'+last.v.toFixed(1)+(s.unit||'')+'</b></div><div class="dc-history-stat"><small>Mínimo</small><b>'+min.toFixed(1)+(s.unit||'')+'</b></div><div class="dc-history-stat"><small>Máximo</small><b>'+max.toFixed(1)+(s.unit||'')+'</b></div><div class="dc-history-stat"><small>Pontos</small><b>'+valid.length+'</b></div>';
- if(valid.length<2){DC.$('historyChart').innerHTML='<div class="dc-history-empty compact"><strong>1 leitura registrada</strong><p>O gráfico aparece a partir da segunda leitura. Você pode clicar em “Coletar ponto agora” para registrar outra leitura.</p></div>';return}
- const w=900,h=210,px=34,py=22;
- const thresholds=[Number(s.warn),Number(s.crit)].filter(Number.isFinite);
- let lo=Math.min.apply(null,valid.map(x=>x.v).concat(thresholds)),hi=Math.max.apply(null,valid.map(x=>x.v).concat(thresholds));
- if(hi===lo){hi=lo+1}
- const pad=(hi-lo)*0.12;lo=Math.max(0,lo-pad);hi+=pad;
- const y=v=>py+((hi-v)/(hi-lo))*(h-py*2);
- const x=i=>px+(i/(valid.length-1))*(w-px*2);
- const pts=valid.map((p,i)=>x(i).toFixed(1)+','+y(p.v).toFixed(1)).join(' ');
- let lines='';
- if(Number.isFinite(Number(s.warn)))lines+='<line class="dc-h-warn" x1="'+px+'" x2="'+(w-px)+'" y1="'+y(Number(s.warn)).toFixed(1)+'" y2="'+y(Number(s.warn)).toFixed(1)+'"></line>';
- if(Number.isFinite(Number(s.crit)))lines+='<line class="dc-h-crit" x1="'+px+'" x2="'+(w-px)+'" y1="'+y(Number(s.crit)).toFixed(1)+'" y2="'+y(Number(s.crit)).toFixed(1)+'"></line>';
- const firstTime=new Date(valid[0].t).toLocaleString('pt-BR'),lastTime=new Date(last.t).toLocaleString('pt-BR');
- DC.$('historyChart').innerHTML='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" aria-label="Histórico de '+DC.esc(s.label)+'">'+lines+'<polyline class="dc-h-line" points="'+pts+'"></polyline>'+valid.map((p,i)=>'<circle class="dc-h-dot" cx="'+x(i).toFixed(1)+'" cy="'+y(p.v).toFixed(1)+'" r="4"></circle>').join('')+'</svg><div class="dc-history-axis"><span>'+DC.esc(firstTime)+'</span><span>Alerta '+s.warn+(s.unit||'')+' · Crítico '+s.crit+(s.unit||'')+'</span><span>'+DC.esc(lastTime)+'</span></div>';
-}
-
-async function loadHistory(){
- const s=historySignals.find(x=>(x.source+'|'+x.key)===selectedHistoryKey);
- if(!s)return;
- DC.$('historyMeta').innerHTML='<span class="dc-quiet">Carregando histórico…</span>';
- const r=await DC.api('/api/infra-history?source='+encodeURIComponent(s.source)+'&metric='+encodeURIComponent(s.key)+'&hours=24');
- if(!r.ok){historyEmpty('Não foi possível carregar o histórico',r.data&&r.data.erro||'Tente novamente.');return}
- renderHistory(r.data&&r.data.points||[],s);
-}
-
+const MEM_COLORS=['#3987e5','#d95926','#199e70','#c98500'];
+const MEM_CHARTS=[
+ {id:'sraDb',titulo:'Banco do Sra Luck',sub:'Supabase · RAM, swap, CPU e disco',logo:'supabase',warn:85,crit:92,series:[['supabase:memory_usage_percent','RAM'],['supabase:swap_usage_percent','Swap'],['supabase:cpu_usage_percent','CPU'],['supabase:disk_usage_percent','Disco']],refs:[{v:85,label:'alerta RAM 85%'}]},
+ {id:'devDb',titulo:'Banco do Dev Console',sub:'Supabase · RAM, swap, CPU e disco',logo:'supabase',warn:85,crit:92,series:[['dev_supabase:memory_usage_percent','RAM'],['dev_supabase:swap_usage_percent','Swap'],['dev_supabase:cpu_usage_percent','CPU'],['dev_supabase:disk_usage_percent','Disco']],refs:[{v:85,label:'alerta RAM 85%'}]},
+ {id:'worker',titulo:'Servidor do Sra Luck',sub:'Cloudflare Worker · memória P99 do limite de 128 MB',logo:'cloudflare',warn:75,crit:90,series:[['cloudflare:worker_memory_p99_percent','Memória P99']],refs:[{v:75,label:'alerta 75%'},{v:90,label:'crítico 90%',tone:'bad'}]},
+ {id:'runtime',titulo:'Função do Dev Console',sub:'Vercel · memória da função (RSS)',logo:'vercel',warn:75,crit:90,series:[['dev_runtime:rss_usage_percent','Memória (RSS)']],refs:[{v:75,label:'alerta 75%'}],vercel:true},
+];
+async function loadMemory(){const grid=DC.$('memGrid');grid.style.opacity=grid.children.length>1?'.55':'1';const keys=MEM_CHARTS.flatMap(c=>c.series.map(s=>s[0]));const r=await DC.api('/api/infra-history?series='+encodeURIComponent(keys.join(','))+'&hours='+memHours);grid.style.opacity='1';if(!r.ok){grid.innerHTML='<div class="dc-warn-box">'+DC.esc(r.error||'Não foi possível carregar o histórico de memória.')+'</div>';return}const data=r.data.series||{};const to=Date.now(),from=to-memHours*3600000;grid.innerHTML='';for(const c of MEM_CHARTS){const card=document.createElement('div');card.className='dc-mem-card';const head=document.createElement('div');head.className='dc-mem-card-head';head.innerHTML='<img src="assets/logos/'+c.logo+'.svg" alt=""/><div><strong></strong><small></small></div><span></span>';head.querySelector('strong').textContent=c.titulo;head.querySelector('small').textContent=c.sub;card.appendChild(head);const chart=document.createElement('div');card.appendChild(chart);grid.appendChild(card);const series=c.series.map(([k,name],i)=>({name,color:MEM_COLORS[i],points:(data[k]||[]).map(p=>({t:p.observed_at,v:p.metric_value}))}));const main=series[0].points.slice(-1)[0];const worst=main?Number(main.v):null;head.querySelector('span').innerHTML=worst==null?DC.chip('Sem leituras','neutral'):DC.chip(worst>=c.crit?'Crítico':worst>=c.warn?'Atenção':'Saudável',worst>=c.crit?'bad':worst>=c.warn?'warn':'ok');let empty='Sem leituras neste período. Clique em “Coletar ponto agora”.';if(c.vercel){const rt=r.data.runtime||{};const note=document.createElement('div');note.className='dc-note';note.textContent='Agora: '+Math.round((rt.rssBytes||0)/1048576)+' MB de RSS, heap '+Math.round((rt.heapUsedBytes||0)/1048576)+'/'+Math.round((rt.heapTotalBytes||0)/1048576)+' MB. A Vercel não expõe a memória das funções pela API; o percentual só aparece com DEV_FUNCTION_MEMORY_LIMIT_MB configurado. O histórico completo fica no Vercel Observability.';card.appendChild(note);empty='Sem percentual: configure DEV_FUNCTION_MEMORY_LIMIT_MB para acompanhar a tendência.'}DCChart.line(chart,{series,unit:'%',yMax:100,from,to,references:c.refs,label:c.titulo+' — uso em %',empty,legend:true})}}
 async function runGuardian(btn){
  const r=await DC.action(btn,()=>DC.api('/api/infra-scan',{method:'POST',body:'{}'}),{success:'Verificação concluída.'});
  if(r&&r.ok)await load();
@@ -192,7 +149,6 @@ async function runGuardianFromDrawer(){DC.closeDrawer();await runGuardian(null)}
 window.runGuardianFromDrawer=runGuardianFromDrawer;
 window.openIssue=openIssue;
 window.openService=openService;
-window.selectHistory=selectHistory;
 
 async function load(){
  if(!await DC.guard())return;
@@ -241,10 +197,7 @@ async function load(){
  else if(visibleIssues.length){const c=explainSignal(visibleIssues[0]);DC.$('nextAction').innerHTML='<div class="dc-next-problem"><small>PRIORIDADE</small><strong>'+DC.esc(c.title)+'</strong><p>'+DC.esc(c.next)+'</p><button class="dc-btn primary" onclick="openIssue(0)">Resolver agora</button></div>'}
  else DC.$('nextAction').innerHTML='<div class="dc-next-problem"><small>CONEXÃO</small><strong>Há um provedor sem resposta</strong><p>Abra a linha marcada como Falha e use o botão de correção para testar e abrir o provedor.</p><a class="dc-btn primary" href="conexoes.html">Testar conexões</a></div>';
 
- historySignals=(I.signals||[]).filter(x=>!x.hidden&&x.value!=null).sort((a,b)=>((b.state==='critical')-(a.state==='critical'))||((b.state==='warning')-(a.state==='warning')));
- if(!historySignals.some(x=>(x.source+'|'+x.key)===selectedHistoryKey))selectedHistoryKey=historySignals[0]?(historySignals[0].source+'|'+historySignals[0].key):'';
- renderHistoryTabs();
- if(selectedHistoryKey)await loadHistory();else historyEmpty('Sem sinais para histórico','Ainda não há métricas disponíveis para montar uma série.');
+ await loadMemory();
 
  renderTechnical(p,sra,dev,cf,ve,rt);
  DC.setTopStatus(overall==='healthy'?'Infraestrutura operacional':overall==='critical'?'Ação necessária':'Acompanhar',overall==='healthy'?'ok':overall==='critical'?'bad':'warn');
@@ -253,7 +206,7 @@ async function load(){
 
 document.addEventListener('DOMContentLoaded',()=>{
  DC.$('scanBtn').onclick=e=>runGuardian(e.currentTarget);
- DC.$('collectPointBtn').onclick=e=>runGuardian(e.currentTarget);
+ DC.$('collectPointBtn').onclick=e=>runGuardian(e.currentTarget);DC.$('memRange').querySelectorAll('button').forEach(b=>b.onclick=()=>{DC.$('memRange').querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));memHours=Number(b.dataset.h);loadMemory()});let memW=innerWidth;window.addEventListener('resize',()=>{if(Math.abs(innerWidth-memW)>40){memW=innerWidth;loadMemory()}});
  DC.$('refreshBtn').onclick=load;
  load();
  DC.poll(load,60000);

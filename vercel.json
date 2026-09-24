@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": false,
+  "functions": {
+    "api/infra-scan.js": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     {
       "path": "/api/infra-scan",
@@ -59,6 +64,18 @@
     {
       "source": "/api/infra-vercel",
       "destination": "/api/infra-scan?mode=vercel"
+    },
+    {
+      "source": "/api/problemas",
+      "destination": "/api/infra-scan?mode=problems"
+    },
+    {
+      "source": "/api/custom-apis",
+      "destination": "/api/infra-scan?mode=custom-apis"
+    },
+    {
+      "source": "/api/agentes",
+      "destination": "/api/infra-scan?mode=agents"
     }
   ],
   "headers": [

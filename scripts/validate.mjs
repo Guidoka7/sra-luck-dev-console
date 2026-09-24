@@ -31,9 +31,19 @@ const must=[
  ['infra page',fs.existsSync(path.join(root,'infraestrutura.html'))],
  ['infra migration',fs.existsSync(path.join(root,'supabase','002_infrastructure_observability.sql'))],
  ['guardian',fs.existsSync(path.join(root,'api','infra-scan.js'))],
- ['history',fs.existsSync(path.join(root,'api','infra-history.js'))],
- ['Dev Supabase provider',fs.existsSync(path.join(root,'api','infra-dev-supabase.js'))],
+ ['central de problemas',fs.existsSync(path.join(root,'problemas.html'))&&fs.existsSync(path.join(root,'api','_lib','problems.js'))],
 ];
 for(const [label,ok] of must)if(!ok)errors.push(`Componente obrigatório ausente: ${label}`);
+
+// Rotas consolidadas em infra-scan.js: o plano Hobby da Vercel limita o número de Functions.
+const vercel=JSON.parse(fs.readFileSync(path.join(root,'vercel.json'),'utf8'));
+const rewrites=new Map((vercel.rewrites||[]).map(r=>[r.source,r.destination]));
+for(const [source,mode] of [['/api/infra-history','history'],['/api/infra-dev-supabase','dev-supabase'],['/api/problemas','problems'],['/api/custom-apis','custom-apis'],['/api/agentes','agents']]){
+  if(rewrites.get(source)!==`/api/infra-scan?mode=${mode}`)errors.push(`Rewrite obrigatório ausente: ${source} -> /api/infra-scan?mode=${mode}`);
+}
+const MAX_FUNCTIONS=12;
+const ignoredApi=new Set(fs.readFileSync(path.join(root,'.vercelignore'),'utf8').split('\n').map(x=>x.trim()).filter(x=>x.startsWith('api/')));
+const functions=fs.readdirSync(path.join(root,'api')).filter(x=>x.endsWith('.js')&&!ignoredApi.has(`api/${x}`));
+if(functions.length>MAX_FUNCTIONS)errors.push(`Vercel Functions acima do limite (${functions.length}/${MAX_FUNCTIONS}). Consolide rotas em uma Function existente.`);
 if(errors.length){console.error(errors.join('\n'));process.exit(1)}
-console.log(`PASS · ${htmls.length} HTML · ${js.length} JS · infraestrutura completa`);
+console.log(`PASS · ${htmls.length} HTML · ${js.length} JS · ${functions.length}/${MAX_FUNCTIONS} Functions · infraestrutura completa`);

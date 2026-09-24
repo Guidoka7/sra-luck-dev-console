@@ -25,13 +25,14 @@ Baseline do sistema principal conferida nesta entrega: `Guidoka7/sra-luck-react`
 A interface foi simplificada para manutenção diária:
 
 1. **Visão Geral** — somente estado, exceções e atenção necessária.
-2. **Incidentes** — erros agrupados, recorrência, impacto e runbooks.
-3. **Sistema Sra Luck** — entrada para V46, Financeiro, App/PWA e integrações.
-4. **Infraestrutura** — Supabase, Vercel, Cloudflare e runtime.
-5. **Notificações** — automação, Web Push e falhas.
-6. **Código & Releases** — SHA, CI, deploys e regressões.
-7. **Acessos** — usuários técnicos e RBAC do Dev Console.
-8. **Conexões** — estado/configuração das fontes externas.
+2. **Central de Problemas** — tudo o que está falhando, com a correção ao lado e verificação automática.
+3. **Incidentes** — erros agrupados, recorrência, impacto e runbooks.
+4. **Sistema Sra Luck** — entrada para V46, Financeiro, App/PWA e integrações.
+5. **Infraestrutura** — Supabase, Vercel, Cloudflare e runtime.
+6. **Notificações** — automação, Web Push e falhas.
+7. **Código & Releases** — SHA, CI, deploys e regressões.
+8. **Acessos** — usuários técnicos e RBAC do Dev Console.
+9. **Conexões** — estado/configuração das fontes externas.
 
 As telas detalhadas continuam no projeto como drill-down e não precisam poluir a navegação principal.
 

@@ -1,7 +1,11 @@
 const crypto=require('crypto');
-const { json, methodNotAllowed, requestId } = require('./_lib/http');
+const { json, body, methodNotAllowed, requestId, sameOrigin } = require('./_lib/http');
 const { requireSession } = require('./_lib/rbac');
 const { rest, audit } = require('./_lib/supabase');
+const { detect, applyAction, autoResolve, persistIncidents } = require('./_lib/problems');
+const customApis = require('./_lib/custom-apis');
+const agents = require('./_lib/agents');
+const { hasPermission } = require('./_lib/rbac');
 const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
 
 function safeEqual(a,b){
@@ -75,6 +79,79 @@ module.exports=async function handler(req,res){
  const mode=String(req.query?.mode||'scan');
  res.setHeader('x-request-id',requestId(req));
 
+ // Central de Problemas (rewrite /api/problemas). Mora aqui para não criar uma
+ // nova Vercel Function: o plano Hobby limita o total de Functions.
+ if(mode==='problems'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   try{return json(res,200,await detect(actor))}
+   catch(e){return json(res,503,{erro:'Não foi possível montar a Central de Problemas agora.',codigo:'PROBLEMS_UNAVAILABLE',detalhe:e?.message||null})}
+  }
+  if(req.method==='POST'){
+   if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   const problemaId=String(input?.problema||'').slice(0,200),actionId=String(input?.acao||'').slice(0,80);
+   if(!problemaId||!actionId)return json(res,400,{erro:'Informe o problema e a correção.',codigo:'PROBLEM_INPUT_INVALID'});
+   try{const r=await applyAction({actor,problemaId,actionId,params:input?.params||null});return json(res,r.status,r.body)}
+   catch(e){return json(res,500,{erro:'Falha ao aplicar a correção.',codigo:'PROBLEM_FIX_FAILED',detalhe:e?.message||null})}
+  }
+  return methodNotAllowed(res,['GET','POST']);
+ }
+
+ // Agentes (rewrite /api/agentes): resumo em linguagem simples e análise por IA.
+ if(mode==='agents'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   try{return json(res,200,await agents.briefing(actor))}
+   catch(e){return json(res,503,{erro:'Os agentes não conseguiram montar o resumo agora.',codigo:'AGENTS_UNAVAILABLE',detalhe:e?.message||null})}
+  }
+  if(req.method==='POST'){
+   if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   if(input?.action!=='analisar')return json(res,400,{erro:'Ação desconhecida.'});
+   const r=await agents.analisarComIA(actor,String(input?.problema||'').slice(0,200));
+   if(r.ok)await audit({actor_user_id:actor.id,action:'agents.ai_analysis',resource:'problems',resource_id:String(input.problema).slice(0,200),details:{modelo:r.modelo}});
+   const {status,...payload}=r;return json(res,status,payload);
+  }
+  return methodNotAllowed(res,['GET','POST']);
+ }
+
+ // APIs personalizadas (rewrite /api/custom-apis).
+ if(mode==='custom-apis'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'integrations.view');if(!actor)return;
+   try{
+    if(String(req.query?.check||'')==='1'){const r=await customApis.checkAll();return json(res,200,{ok:true,disponivel:r.available,apis:r.apis})}
+    return json(res,200,{ok:true,disponivel:true,apis:await customApis.list()});
+   }catch(e){return json(res,200,{ok:true,disponivel:false,apis:[],erro:'Tabela dev_custom_apis ainda não criada (aplique supabase/003_custom_apis.sql).'})}
+  }
+  if(req.method!=='POST')return methodNotAllowed(res,['GET','POST']);
+  if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+  const actor=await requireSession(req,res,'integrations.view');if(!actor)return;
+  let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+  const action=String(input?.action||'');const id=String(input?.id||'').replace(/[^0-9a-f-]/gi,'').slice(0,36);
+  const manage=['save','delete','toggle'].includes(action);
+  if(manage&&!hasPermission(actor,'integrations.manage'))return json(res,403,{erro:'Seu perfil não pode alterar APIs personalizadas.',codigo:'DEV_PERMISSION_DENIED',permission:'integrations.manage'});
+  try{
+   if(action==='save'){
+    const {errors,row}=customApis.validate(input);if(errors.length)return json(res,400,{erro:errors.join(' '),codigo:'CUSTOM_API_INVALID'});
+    const saved=id?await rest(`dev_custom_apis?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({...row,updated_at:new Date().toISOString()})}):await rest('dev_custom_apis',{method:'POST',body:JSON.stringify({...row,created_by:actor.id})});
+    const api=saved?.[0];if(!api)return json(res,404,{erro:'API não encontrada.'});
+    await audit({actor_user_id:actor.id,action:id?'custom_api.update':'custom_api.create',resource:'custom_api',resource_id:api.id,details:{name:api.name,host:new URL(api.base_url).host}});
+    return json(res,200,{ok:true,api:await customApis.checkAndStore(api)});
+   }
+   if(!id)return json(res,400,{erro:'Informe a API.'});
+   const found=(await rest(`dev_custom_apis?id=eq.${id}&select=${customApis.FIELDS}&limit=1`,{method:'GET'}))?.[0];
+   if(!found)return json(res,404,{erro:'API não encontrada.'});
+   if(action==='test')return json(res,200,{ok:true,api:await customApis.checkAndStore(found)});
+   if(action==='toggle'){const r=await rest(`dev_custom_apis?id=eq.${id}`,{method:'PATCH',body:JSON.stringify({enabled:!found.enabled,updated_at:new Date().toISOString()})});await audit({actor_user_id:actor.id,action:'custom_api.toggle',resource:'custom_api',resource_id:id,details:{enabled:!found.enabled}});return json(res,200,{ok:true,api:r?.[0]})}
+   if(action==='delete'){await rest(`dev_custom_apis?id=eq.${id}`,{method:'DELETE'});await audit({actor_user_id:actor.id,action:'custom_api.delete',resource:'custom_api',resource_id:id,details:{name:found.name}});return json(res,200,{ok:true})}
+   return json(res,400,{erro:'Ação desconhecida.'});
+  }catch(e){return json(res,503,{erro:'Não foi possível salvar. Confirme se supabase/003_custom_apis.sql foi aplicado.',detalhe:e?.message||null})}
+ }
+
  if(mode!=='scan'){
   if(req.method!=='GET')return methodNotAllowed(res,['GET']);
   const actor=await requireSession(req,res,'infrastructure.view');if(!actor)return;
@@ -88,6 +165,18 @@ module.exports=async function handler(req,res){
    }catch(_){
     return json(res,503,{erro:'Não foi possível consultar o Supabase do Dev Console.',codigo:'DEV_SUPABASE_INFRA_UNAVAILABLE'});
    }
+  }
+
+  if(mode==='history'&&req.query?.series){
+   // Várias séries de uma vez: series=supabase:memory_usage_percent,cloudflare:worker_memory_p99_percent
+   const keys=String(req.query.series).split(',').map(x=>x.trim()).filter(x=>/^[a-z0-9_-]{1,60}:[a-z0-9_.-]{1,100}$/i.test(x)).slice(0,16);
+   const hours=Math.min(Math.max(Number(req.query?.hours||24),1),720);
+   const since=new Date(Date.now()-hours*3600000).toISOString();
+   try{
+    const out={};
+    await Promise.all(keys.map(async k=>{const [source,metric]=k.split(':');out[k]=await rest(`dev_metric_snapshots?source=eq.${encodeURIComponent(source)}&metric_key=eq.${encodeURIComponent(metric)}&observed_at=gte.${encodeURIComponent(since)}&select=metric_value,state,observed_at&order=observed_at.asc&limit=2000`,{method:'GET'})}));
+    return json(res,200,{ok:true,hours,since,series:out,runtime:runtimeMetrics().metrics});
+   }catch(_){return json(res,503,{erro:'Não foi possível carregar o histórico de infraestrutura.',codigo:'INFRA_HISTORY_UNAVAILABLE'})}
   }
 
   if(mode==='history'){
@@ -131,8 +220,15 @@ module.exports=async function handler(req,res){
  try{
   const overview=await getInfraOverview({includeLogs:true});
   const result=await persistScan(overview);
-  if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:result});
-  return json(res,200,{ok:true,result,overall:overview.overall,signals:overview.signals});
+  // A varredura agendada também roda a Central de Problemas: aplica só as
+  // correções seguras (L2) e abre/mitiga incidentes dos problemas restantes.
+  let problems=null;
+  try{
+   if(cron)problems=await autoResolve();
+   else{const found=await detect(actor);problems={detectados:found.resumo.total,incidents:await persistIncidents(found,overview.generatedAt)}}
+  }catch(e){problems={erro:e?.message||'Falha na Central de Problemas.'}}
+  if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:{...result,problems}});
+  return json(res,200,{ok:true,result,problems,overall:overview.overall,signals:overview.signals});
  }catch(e){
   return json(res,500,{erro:'Falha ao executar o Infrastructure & Resource Guardian.',codigo:'INFRA_SCAN_FAILED',detalhe:e?.message||null});
  }
