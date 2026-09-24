@@ -2,9 +2,10 @@ const crypto=require('crypto');
 const { json, body, methodNotAllowed, requestId, sameOrigin } = require('./_lib/http');
 const { requireSession } = require('./_lib/rbac');
 const { rest, audit } = require('./_lib/supabase');
-const { detect, applyAction, autoResolve, persistIncidents } = require('./_lib/problems');
+const { detect, applyAction, autoResolve, persistIncidents, persistProbes, testarFonte, historicoIncidente } = require('./_lib/problems');
 const customApis = require('./_lib/custom-apis');
 const agents = require('./_lib/agents');
+const incidents = require('./_lib/incidents');
 const { hasPermission } = require('./_lib/rbac');
 const { getInfraOverview, fetchCloudflareWorker, fetchDevSupabaseMetrics, fetchSupabaseMetrics, fetchSupabaseLogs, fetchVercel, runtimeMetrics } = require('./_lib/infra');
 
@@ -38,11 +39,14 @@ async function sustained(source,key,current,t,observedAt){
 }
 async function upsertIncident(signal,t,observedAt){
  const fingerprint=`infra:${signal.source}:${signal.key}`;
- let existing=[];try{existing=await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count,severity&limit=1`,{method:'GET'})}catch{}
+ let existing=[];try{existing=await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count,severity,metadata&limit=1`,{method:'GET'})}catch{}
  const severity=signal.state==='critical'?'critical':'high';
  if(existing[0]){
-  const row=existing[0];const nextStatus=row.status==='resolved'?'reopened':row.status;
-  const updated=await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',body:JSON.stringify({status:nextStatus,severity,occurrence_count:Number(row.occurrence_count||0)+1,last_seen_at:observedAt,metadata:{source:signal.source,metric_key:signal.key,value:signal.value,unit:signal.unit,warning:t.warning_value,critical:t.critical_value,sustain_seconds:t.sustain_seconds}})});
+  const row=existing[0];const manual=row.metadata?.manual;
+  // Resolvido volta a abrir se o sinal voltar; mitigado só reabre se a mitigação foi automática (não marcada por alguém).
+  const nextStatus=row.status==='resolved'||(row.status==='mitigated'&&manual?.status!=='mitigated')?'reopened':row.status;
+  if(nextStatus==='reopened'&&row.status!=='reopened')try{await rest('dev_incident_events',{method:'POST',body:JSON.stringify({incident_id:row.id,event_type:'reopened',message:`${signal.label} voltou a ${signal.state==='critical'?'crítico':'degradado'} depois de recuperar.`,details:{value:signal.value,unit:signal.unit}})})}catch{}
+  const updated=await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`,{method:'PATCH',body:JSON.stringify({status:nextStatus,severity,occurrence_count:Number(row.occurrence_count||0)+1,last_seen_at:observedAt,...(nextStatus==='reopened'?{resolved_at:null}:{}),metadata:{...(manual?{manual}:{}),source:signal.source,metric_key:signal.key,value:signal.value,unit:signal.unit,warning:t.warning_value,critical:t.critical_value,sustain_seconds:t.sustain_seconds}})});
   try{await rest('dev_incident_events',{method:'POST',body:JSON.stringify({incident_id:row.id,event_type:'signal_repeated',message:`${signal.label} permanece ${signal.state}.`,details:{value:signal.value,unit:signal.unit}})})}catch{}
   return updated?.[0]||row;
  }
@@ -81,9 +85,32 @@ module.exports=async function handler(req,res){
 
  // Central de Problemas (rewrite /api/problemas). Mora aqui para não criar uma
  // nova Vercel Function: o plano Hobby limita o total de Functions.
+ // Central de Incidentes (rewrite /api/incidentes): acompanhamento, sem mexer em produção.
+ if(mode==='incidents'){
+  if(req.method==='GET'){
+   const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   try{return json(res,200,{...(await incidents.listar({dias:req.query?.dias})),podeGerenciar:hasPermission(actor,'incidents.manage'),eu:actor.id})}
+   catch(e){return json(res,503,{erro:'Não foi possível ler os incidentes agora.',codigo:'INCIDENTS_UNAVAILABLE',detalhe:e?.message||null})}
+  }
+  if(req.method==='POST'){
+   if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
+   const actor=await requireSession(req,res,'incidents.manage');if(!actor)return;
+   let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   try{const r=await incidents.atualizar(actor,input);return json(res,r.status,r.body)}
+   catch(e){return json(res,500,{erro:'Não foi possível atualizar o incidente.',codigo:'INCIDENT_UPDATE_FAILED',detalhe:e?.message||null})}
+  }
+  return methodNotAllowed(res,['GET','POST']);
+ }
+
  if(mode==='problems'){
   if(req.method==='GET'){
    const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
+   if(req.query?.incidente){
+    const fp=String(req.query.incidente).slice(0,300);
+    if(!/^(problem|infra):/.test(fp))return json(res,400,{erro:'Incidente inválido.',codigo:'INCIDENT_INVALID'});
+    try{return json(res,200,await historicoIncidente(fp))}
+    catch(e){return json(res,503,{erro:'Histórico do incidente indisponível.',codigo:'INCIDENT_HISTORY_UNAVAILABLE',detalhe:e?.message||null})}
+   }
    try{return json(res,200,await detect(actor))}
    catch(e){return json(res,503,{erro:'Não foi possível montar a Central de Problemas agora.',codigo:'PROBLEMS_UNAVAILABLE',detalhe:e?.message||null})}
   }
@@ -91,6 +118,12 @@ module.exports=async function handler(req,res){
    if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
    const actor=await requireSession(req,res,'monitoring.view');if(!actor)return;
    let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
+   // Reteste de um teste específico: só leitura no Sra Luck, nunca corrige nada.
+   if(input?.teste){
+    const id=String(input.teste).slice(0,60);
+    try{const f=await testarFonte(id,actor);return f?json(res,200,{ok:true,fonte:f}):json(res,404,{erro:'Teste desconhecido.',codigo:'PROBE_UNKNOWN'})}
+    catch(e){return json(res,502,{erro:'Não foi possível executar o teste agora.',codigo:'PROBE_FAILED',detalhe:e?.message||null})}
+   }
    const problemaId=String(input?.problema||'').slice(0,200),actionId=String(input?.acao||'').slice(0,80);
    if(!problemaId||!actionId)return json(res,400,{erro:'Informe o problema e a correção.',codigo:'PROBLEM_INPUT_INVALID'});
    try{const r=await applyAction({actor,problemaId,actionId,params:input?.params||null});return json(res,r.status,r.body)}
@@ -174,7 +207,7 @@ module.exports=async function handler(req,res){
    const since=new Date(Date.now()-hours*3600000).toISOString();
    try{
     const out={};
-    await Promise.all(keys.map(async k=>{const [source,metric]=k.split(':');out[k]=await rest(`dev_metric_snapshots?source=eq.${encodeURIComponent(source)}&metric_key=eq.${encodeURIComponent(metric)}&observed_at=gte.${encodeURIComponent(since)}&select=metric_value,state,observed_at&order=observed_at.asc&limit=2000`,{method:'GET'})}));
+    await Promise.all(keys.map(async k=>{const [source,metric]=k.split(':');out[k]=await rest(`dev_metric_snapshots?source=eq.${encodeURIComponent(source)}&metric_key=eq.${encodeURIComponent(metric)}&observed_at=gte.${encodeURIComponent(since)}&select=metric_value,state,observed_at,dimensions&order=observed_at.asc&limit=2000`,{method:'GET'})}));
     return json(res,200,{ok:true,hours,since,series:out,runtime:runtimeMetrics().metrics});
    }catch(_){return json(res,503,{erro:'Não foi possível carregar o histórico de infraestrutura.',codigo:'INFRA_HISTORY_UNAVAILABLE'})}
   }
@@ -225,7 +258,7 @@ module.exports=async function handler(req,res){
   let problems=null;
   try{
    if(cron)problems=await autoResolve();
-   else{const found=await detect(actor);problems={detectados:found.resumo.total,incidents:await persistIncidents(found,overview.generatedAt)}}
+   else{const found=await detect(actor);problems={detectados:found.resumo.total,incidents:await persistIncidents(found,overview.generatedAt),probes:await persistProbes(found.fontes,overview.generatedAt)}}
   }catch(e){problems={erro:e?.message||'Falha na Central de Problemas.'}}
   if(actor)await audit({actor_user_id:actor.id,action:'infra.guardian.scan',resource:'infrastructure',details:{...result,problems}});
   return json(res,200,{ok:true,result,problems,overall:overview.overall,signals:overview.signals});

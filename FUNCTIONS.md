@@ -75,13 +75,25 @@ Depois de cada correção, o console reconsulta as fontes e informa se o problem
 
 Desempenho do App (memória, travamentos e carregamento lento) chega pelo monitoramento de erros do Sra Luck com os códigos `APP_MEMORY_PRESSURE`, `APP_MAIN_THREAD_BLOCKED` e `APP_SLOW_LOAD`.
 
+## Central de Incidentes
+
+`incidentes.html` acompanha os incidentes que a varredura registra (`dev_incidents`): problemas alto/crítico da Central de Problemas e sinais sustentados da infraestrutura. A Central de Problemas mostra o que está falhando agora; a Central de Incidentes mostra o ciclo de vida:
+
+- **exigem ação**: alto/crítico aberto, reaberto ou em investigação, e mitigado que continua sendo detectado; o resto fica recolhido em "Em acompanhamento" e "Resolvidos";
+- **status** investigando, mitigado ou resolvido, **responsável** e **notas**, com evento e auditoria (`incidents.manage`); nada disso toca a produção;
+- **voltou**: resolvido que volta a ser detectado reabre sozinho; mitigado marcado por alguém só reabre se tinha sido mitigado automaticamente;
+- **agrupamento**: alertas com o mesmo deploy suspeito (início até 6 h de diferença), do mesmo componente ou de componentes dependentes (até 2 h) aparecem como um incidente, e status/responsável podem ser aplicados ao grupo;
+- **relações**: componente, fluxo, testes e deploys/migrations perto do início, com antes x depois;
+- **estabilidade 24 h / 7 dias**: percentual de leituras OK dos testes gravados por componente, falhas, dia a dia e incidentes abertos no período;
+- "Investigar com checklist" abre a investigação guiada da Visão Geral para o mesmo alerta.
+
 ## Controle do Admin Sra Luck
 
 Com `DEV_CONSOLE_M2M_WRITE=1` no Sra Luck, o Dev Console opera as mesmas funções do Admin, sem regra nova:
 
 - **Notificações** (`notificacoes.html`): ligar/desligar o lembrete de atraso, frequência, máximo de tentativas, criar/editar/ativar templates, envio manual para uma cliente e envio forçado de atrasos.
 - **Configurações do Admin** (`configuracoes-sra.html`): nome da clínica, meta mensal, frase do app, bloqueio da agenda de liberação financeira, PIX (chave, desconto, QR Code), contatos e cores do tema. Só os campos alterados são enviados.
-- **Integrações** (`integracoes.html`): testes de conexão e teste/sincronização do RD Station. Credenciais e chaves VAPID continuam sendo editadas no Admin.
+- **Integrações** (`integracoes.html` + `assets/dev-console-integracoes.js`): padrão por integração montado do catálogo do Sra Luck (funções com situação real, origem/destino, mapeamento, sincronização, webhooks, histórico, regras e limites), testes de conexão, teste/sincronização do RD Station e configuração por função do Gemini. Credenciais e chaves VAPID continuam sendo editadas no Admin.
 
 ## Carrossel do App
 

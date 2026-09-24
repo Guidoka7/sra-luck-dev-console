@@ -17,7 +17,8 @@
 - `GET /api/dev-status`
 - `GET /api/dev-health`
 - `GET /api/dev-ready`
-- `GET /api/github-status?resource=summary|overview|branches|workflows` — `code.view`
+- `GET /api/github-status?resource=summary|overview|branches|workflows|changes` — `code.view`
+  - `changes`: últimos commits e CI da main do Sra Luck, migrations presentes no repositório (a aplicação no banco é manual e não é afirmada), deploys da Vercel e `sincronia` (`sincronizado` | `producao_atras` com `commitsAtras` | `divergente` | `desconhecido` + `motivo`). Usado pela Visão Geral.
 - `POST /api/github-status` `{ action: rerun_failed|merge_pr|create_pr|dispatch_workflow|redeploy|promote, repo: sra|console, ... }` — `releases.manage` (developer/owner), auditado
 
 ### Proxy
@@ -47,6 +48,11 @@ A autorização real do Sra Luck continua existindo do outro lado; o RBAC do Dev
 ## Central de Problemas
 
 - `GET /api/problemas` — detecta problemas em plataforma, Admin, App da cliente, notificações, V46, financeiro e integrações (`monitoring.view`).
+  - cada problema com incidente aberto em `dev_incidents` traz `incidente: { status, desde, ultimaVez, varreduras }`; `desde` só é preenchido quando o incidente está aberto (um incidente reaberto não serve de início). A Visão Geral usa `desde` para cruzar o problema com deploys e migrations.
+- `GET /api/incidentes?dias=7` — incidentes abertos/mitigados e os atualizados no período (até 30 dias), eventos (sem `signal_repeated`), responsáveis possíveis, `podeGerenciar` e `eu` (`monitoring.view`). Mora em `api/infra-scan.js` (`mode=incidents`).
+- `POST /api/incidentes` `{ ids, acao: status|responsavel|nota, status?: investigating|mitigated|resolved, usuario?, nota? }` — muda só o acompanhamento no banco do Dev Console, até 20 incidentes por vez (um grupo), com evento e auditoria (`incidents.manage`, mesma origem).
+- `GET /api/problemas?incidente=problem:…|infra:…` — incidente registrado e seus eventos (`opened`, `signal_repeated`, `signal_recovered`, `reopened`, `fix_applied`) para a linha do tempo (`monitoring.view`).
+- `POST /api/problemas` `{ teste }` — reteste de um único teste da Central (ids de `SOURCES` em `api/_lib/problems.js`). É o mesmo GET da varredura, só leitura no Sra Luck; o resultado é gravado em `dev_metric_snapshots` como `probe` com `dimensions.manual=true` (`monitoring.view`, mesma origem).
 - `POST /api/problemas` — `{ problema, acao, params? }` aplica uma correção do registro fechado e verifica se o problema sumiu. A permissão depende da ação:
   - `notificacoes.verificar_atrasos` / `notificacoes.verificar_vencimentos` → `notifications.manage` (seguro, L2)
   - `integracoes.testar` → `integrations.manage` (seguro, L2)
@@ -58,6 +64,16 @@ Mora em `api/infra-scan.js` (`mode=problems`) por causa do limite de Functions d
 
 - `GET /api/agentes` — resumo do dia, agentes, novidades boas e ruins, correções recentes (`monitoring.view`)
 - `POST /api/agentes` `{ action: "analisar", problema }` — análise por IA do problema (Gemini, opcional)
+
+## Padrão de integrações (via proxy do Sra Luck)
+
+- `GET /api/sra-proxy?path=/api/admin/integrations/catalogo` — registro de cada integração do Sra Luck (`worker/integracoes-registro.ts`): credenciais (só chave, rótulo e obrigatoriedade, nunca valores), funções com situação real (`disponivel`, `api_permite`, `api_nao_permite` + motivo), origem e destino, mapeamento de campos, modos de sincronização, webhooks de entrada/saída, limites e regras; funções configuráveis trazem `config`, `versao`, `atualizadoEm` e `usoHoje` (`integrations.view`).
+- `POST /api/sra-proxy?path=/api/admin/integrations/config` `{ provedor, funcao, config, versao }` — grava a configuração **não secreta** de uma função (hoje: Gemini `mensagem_diaria` e `notificacoes`: `ativo`, `modelo`, `prompt`, `temperatura`, `maxTokens`, `limiteDiario`). Versão otimista (409 em conflito) e auditoria no Sra Luck. Dev Console: `integrations.manage`; guarda M2M do Sra Luck: só owner/developer e só essas chaves.
+- `POST …/config` também aceita `rd_station.importacao` (funil, etapas, status, mapeamento de campos, deduplicação, frequência). A configuração `conta_azul.sincronizacao` só é gravada no Admin (a guarda M2M recusa).
+- CRM (RD, somente leitura): `GET /api/sra-proxy?path=/api/admin/integrations/rd-station/opcoes` (funis, etapas, campos personalizados), `…/rd-station/importacoes`, `…/importacoes/revisao`, `…/importacoes/{id}/itens` (dados pessoais mascarados) — `integrations.view`; `POST …/rd-station/importar` (corpo vazio, owner/developer) — `integrations.manage`. "Importar mesmo assim" e "é a mesma pessoa" ficam no Admin.
+- Conta Azul (só leitura no Dev Console): `GET …/conta-azul/painel`, `…/conflitos`, `…/fila`, `…/vinculos`, `…/historico`, `…/opcoes` — `integrations.view`. Sincronizar, resolver conflito, reprocessar fila, enviar parcelas e conectar OAuth são mutações financeiras: só no Admin.
+- Sem o catálogo em produção (404), `integracoes.html` avisa e abre o drawer no formato anterior.
+- Segredos continuam só no cofre cifrado do Sra Luck, editados no Admin; o Dev Console mostra origem e máscara.
 
 ## APIs personalizadas
 
@@ -73,7 +89,7 @@ Só HTTPS público (endereços privados/internos bloqueados, sem seguir redireci
 - `GET /api/infra-supabase?hours=1|6|24` — métricas + erros do Supabase Sra Luck
 - `GET /api/infra-dev-supabase` — saúde/métricas do Supabase próprio do Dev Console
 - `GET /api/infra-history?source=&metric=&hours=` — histórico persistido de recursos
-- `GET /api/infra-history?series=fonte:metrica,...&hours=` — várias séries de uma vez (até 16), usado pelos gráficos de memória
+- `GET /api/infra-history?series=fonte:metrica,...&hours=` — várias séries de uma vez (até 16), usado pelos gráficos de memória e pela Visão Geral (`probe:<fluxo>` = latência real de cada fluxo testado, em ms, gravada a cada varredura); cada ponto traz `metric_value`, `state`, `observed_at` e `dimensions` (status HTTP, reteste manual)
 - `GET /api/infra-cloudflare` — Worker CPU/memory/request/error metrics
 - `GET /api/infra-vercel` — deploys Vercel + runtime atual
 - `GET /api/infra-runtime` — memória do runtime atual do Dev Console

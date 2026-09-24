@@ -1,0 +1,24 @@
+# Rede de segurança: o Wrangler lê este arquivo só se a pasta de assets for a raiz do repositório.
+# O deploy normal publica dist/ (wrangler.jsonc), montado por scripts/build-static.mjs, e não depende dele.
+node_modules
+.git
+.github
+.vercel
+.wrangler
+dist
+api
+supabase
+docs
+scripts
+qa-local
+*.md
+*.json
+*.jsonc
+*.txt
+*.sql
+*.mjs
+.env*
+.editorconfig
+.gitignore
+.vercelignore
+.assetsignore

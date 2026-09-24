@@ -26,3 +26,5 @@ Thumbs.db
 
 # Local QA captures not committed intentionally
 qa-local/
+dist/
+.wrangler/

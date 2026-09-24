@@ -1,0 +1,17 @@
+// Cloudflare Workers (somente assets estáticos) do Dev Console.
+// Publica apenas dist/, montado por scripts/build-static.mjs com as páginas HTML e assets/.
+// A raiz do repositório NÃO é publicada (node_modules, .git, api/, supabase/, docs etc. ficam de fora).
+// As Functions de api/ continuam sendo da Vercel; este Worker não executa código.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sra-luck-dev-console",
+  "compatibility_date": "2026-09-01",
+  "build": {
+    "command": "node scripts/build-static.mjs"
+  },
+  "assets": {
+    "directory": "./dist",
+    // Igual à Vercel (cleanUrls: false): as páginas são servidas pelo nome com .html.
+    "html_handling": "none"
+  }
+}

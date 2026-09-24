@@ -314,6 +314,23 @@ function sinaisPositivos(data, fontes, custom) {
   };
 }
 
+// Desde quando cada problema existe, a partir do incidente já registrado pela
+// varredura (dev_incidents, source=problems). Sem registro, `desde` fica como o
+// detector informou (ou vazio): nada é estimado.
+async function anexarHistorico(problemas) {
+  if (!problemas.length) return;
+  let rows = [];
+  try { rows = await rest('dev_incidents?source=eq.problems&status=in.(open,investigating,reopened)&select=fingerprint,status,first_seen_at,last_seen_at,occurrence_count&order=first_seen_at.desc&limit=300', { method: 'GET' }); } catch { return; }
+  const porChave = new Map((Array.isArray(rows) ? rows : []).map((r) => [r.fingerprint, r]));
+  for (const p of problemas) {
+    const r = porChave.get(`problem:${p.fingerprint}`);
+    if (!r) continue;
+    p.incidente = { status: r.status, desde: r.first_seen_at, ultimaVez: r.last_seen_at, varreduras: r.occurrence_count };
+    // Reaberto: first_seen_at é da primeira ocorrência antiga, não do início desta; não serve de âncora.
+    if (!p.desde && r.status !== 'reopened') p.desde = r.first_seen_at;
+  }
+}
+
 async function detect(actor) {
   const [{ data, fontes }, custom] = await Promise.all([collect(actor), customApis.checkAll().catch(() => ({ available: false, apis: [] }))]);
   const problemas = [];
@@ -327,6 +344,7 @@ async function detect(actor) {
   detectIntegrations(data, problemas);
   detectCustomApis(custom.apis, problemas);
   for (const p of problemas) p.explicacao = explicar(p);
+  await anexarHistorico(problemas);
   problemas.sort((a, b) => (SEVERITY_RANK[a.severidade] - SEVERITY_RANK[b.severidade]) || (b.ocorrencias - a.ocorrencias));
   const count = (s) => problemas.filter(p => p.severidade === s).length;
   const configurado = Boolean(sraConfig().token);
@@ -378,11 +396,15 @@ async function persistIncidents(result, observedAt) {
     const severity = p.severidade;
     const metadata = { dominio: p.dominio, tipo: p.tipo, descricao: p.descricao, impacto: p.impacto, evidencias: p.evidencias, acoes: p.acoes.map(a => a.id) };
     let existing = [];
-    try { existing = await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count&limit=1`, { method: 'GET' }); } catch { continue; }
+    try { existing = await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,status,occurrence_count,metadata&limit=1`, { method: 'GET' }); } catch { continue; }
     try {
       if (existing[0]) {
         const row = existing[0];
-        await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', body: JSON.stringify({ status: row.status === 'resolved' || row.status === 'mitigated' ? 'reopened' : row.status, severity, title: p.titulo, occurrence_count: Math.max(Number(row.occurrence_count || 0) + 1, p.ocorrencias || 1), last_seen_at: observedAt, metadata }) });
+        // Resolvido volta a abrir se o problema voltar; mitigado só reabre quando a mitigação foi automática.
+        const manual = row.metadata?.manual;
+        const reabriu = row.status === 'resolved' || (row.status === 'mitigated' && manual?.status !== 'mitigated');
+        if (reabriu) await rest('dev_incident_events', { method: 'POST', body: JSON.stringify({ incident_id: row.id, event_type: 'reopened', message: row.status === 'resolved' ? 'Estava marcado como resolvido e voltou a ser detectado.' : 'O problema voltou a ser detectado depois de mitigado.', details: { evidencias: p.evidencias } }) }).catch(() => undefined);
+        await rest(`dev_incidents?id=eq.${encodeURIComponent(row.id)}`, { method: 'PATCH', body: JSON.stringify({ status: reabriu ? 'reopened' : row.status, ...(reabriu ? { resolved_at: null } : {}), severity, title: p.titulo, occurrence_count: Math.max(Number(row.occurrence_count || 0) + 1, p.ocorrencias || 1), last_seen_at: observedAt, metadata: { ...metadata, ...(manual ? { manual } : {}) } }) });
       } else {
         const created = await rest('dev_incidents', { method: 'POST', body: JSON.stringify({ fingerprint, title: p.titulo, module: p.dominio, severity, status: 'open', occurrence_count: p.ocorrencias || 1, affected_entities: p.alvo?.length || 0, first_seen_at: p.desde || observedAt, last_seen_at: observedAt, source: 'problems', source_reference: p.id, metadata }) });
         if (created?.[0]) await rest('dev_incident_events', { method: 'POST', body: JSON.stringify({ incident_id: created[0].id, event_type: 'opened', message: 'Central de Problemas detectou a falha.', details: { evidencias: p.evidencias } }) }).catch(() => undefined);
@@ -431,10 +453,52 @@ async function applyAction({ actor, problemaId, actionId, params, auto = false }
   return { status: response.ok ? 200 : (response.status >= 400 ? response.status : 502), body };
 }
 
+/**
+ * Guarda o resultado de cada fluxo testado (latência real e se respondeu)
+ * em dev_metric_snapshots (source "probe"), para a Visão Geral ter histórico
+ * de API e fluxos. Fluxos sem conector não geram ponto (ausência ≠ zero).
+ */
+async function persistProbes(fontes, observedAt) {
+  const rows = (fontes || []).filter((f) => !f.naoConfigurado && Number.isFinite(Number(f.ms))).map((f) => ({
+    source: 'probe', metric_key: f.id, metric_value: Number(f.ms), unit: 'ms', state: f.ok ? 'healthy' : 'critical',
+    dimensions: { label: f.label, area: f.area, status: f.status ?? null }, observed_at: observedAt,
+  }));
+  if (!rows.length) return 0;
+  try { await rest('dev_metric_snapshots', { method: 'POST', body: JSON.stringify(rows) }); return rows.length; } catch { return 0; }
+}
+
+// Reteste de um único teste da Central (somente leitura no Sra Luck: o mesmo GET da varredura).
+// O resultado entra no histórico como leitura manual, para a linha do tempo mostrar falha e recuperação.
+async function testarFonte(id, actor) {
+  const src = SOURCES.find(([sid]) => sid === id);
+  if (!src) return null;
+  const [sid, label, rawPath, area] = src;
+  const path = typeof rawPath === 'function' ? rawPath() : rawPath;
+  const r = await sraFetch(path, { actor: { id: actor?.id || 'problem-center', role: 'viewer' } });
+  const fonte = { id: sid, label, area, path: path.split('?')[0], ok: r.ok, status: r.status, ms: r.ms ?? null, erro: r.erro || null, naoConfigurado: Boolean(r.notConfigured), testadoEm: new Date().toISOString() };
+  if (!fonte.naoConfigurado && Number.isFinite(Number(fonte.ms))) {
+    try {
+      await rest('dev_metric_snapshots', { method: 'POST', body: JSON.stringify([{ source: 'probe', metric_key: sid, metric_value: Number(fonte.ms), unit: 'ms', state: fonte.ok ? 'healthy' : 'critical', dimensions: { label, area, status: fonte.status ?? null, manual: true }, observed_at: fonte.testadoEm }]) });
+      fonte.gravado = true;
+    } catch { fonte.gravado = false; }
+  }
+  return fonte;
+}
+
+// Incidente e seus eventos (abertura, repetição, recuperação, reabertura, correções) para a linha do tempo.
+async function historicoIncidente(fingerprint) {
+  const rows = await rest(`dev_incidents?fingerprint=eq.${encodeURIComponent(fingerprint)}&select=id,fingerprint,status,severity,first_seen_at,last_seen_at,occurrence_count,source&limit=1`, { method: 'GET' });
+  const inc = rows?.[0];
+  if (!inc) return { ok: true, incidente: null, eventos: [] };
+  const eventos = await rest(`dev_incident_events?incident_id=eq.${encodeURIComponent(inc.id)}&select=event_type,message,created_at&order=created_at.asc&limit=200`, { method: 'GET' });
+  return { ok: true, incidente: inc, eventos: Array.isArray(eventos) ? eventos : [] };
+}
+
 async function autoResolve() {
   const started = Date.now();
   const observedAt = new Date().toISOString();
   const result = await detect(null);
+  const probes = await persistProbes(result.fontes, observedAt);
   const aplicadas = [];
   for (const p of result.problemas) {
     for (const a of p.acoes) {
@@ -445,11 +509,11 @@ async function autoResolve() {
   }
   const final = aplicadas.length ? await detect(null) : result;
   const incidents = await persistIncidents(final, observedAt);
-  const summary = { detectados: result.resumo.total, restantes: final.resumo.total, aplicadas, incidents };
+  const summary = { detectados: result.resumo.total, restantes: final.resumo.total, aplicadas, incidents, probes };
   try {
     await rest('dev_job_runs', { method: 'POST', body: JSON.stringify({ agent_key: 'problem-center', job_key: 'problems.autofix', status: aplicadas.some(a => !a.ok) ? 'warning' : 'ok', started_at: observedAt, finished_at: new Date().toISOString(), duration_ms: Date.now() - started, processed_count: result.resumo.total, success_count: aplicadas.filter(a => a.ok).length, failure_count: aplicadas.filter(a => !a.ok).length, details: summary }) });
   } catch { /* idem */ }
   return summary;
 }
 
-module.exports = { detect, applyAction, autoResolve, persistIncidents, ACTIONS, normalizeRoute, sraFetch };
+module.exports = { detect, applyAction, autoResolve, persistIncidents, persistProbes, testarFonte, historicoIncidente, SOURCES, ACTIONS, normalizeRoute, sraFetch };

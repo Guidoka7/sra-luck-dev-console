@@ -11,3 +11,6 @@ BUILD-MANIFEST.json
 
 api/infra-supabase.js
 api/infra-vercel.js
+wrangler.jsonc
+.assetsignore
+dist/
