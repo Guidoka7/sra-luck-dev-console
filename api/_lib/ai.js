@@ -1,11 +1,12 @@
 // Análise por IA opcional e gratuita: Google Gemini (camada gratuita do AI Studio).
 // Sem GEMINI_API_KEY, os agentes continuam funcionando só com regras.
 // Nunca envia nome, CPF, e-mail ou telefone: só dados técnicos do problema.
+const { getSecret } = require('./secrets');
 
 const TECH_TYPES = new Set(['codigo', 'infra', 'configuracao', 'permissao']);
 
-function configured() {
-  return Boolean(String(process.env.GEMINI_API_KEY || '').trim());
+async function configured() {
+  return Boolean(String((await getSecret('GEMINI_API_KEY')) || '').trim());
 }
 
 function safeContext(p) {
@@ -34,9 +35,9 @@ const SYSTEM = [
 ].join(' ');
 
 async function analisar(problema) {
-  const key = String(process.env.GEMINI_API_KEY || '').trim();
+  const key = String((await getSecret('GEMINI_API_KEY')) || '').trim();
   if (!key) return { ok: false, codigo: 'AI_NOT_CONFIGURED', erro: 'Configure GEMINI_API_KEY (gratuita no Google AI Studio) na Vercel do Dev Console para ativar a análise por IA.' };
-  const model = String(process.env.GEMINI_MODEL || 'gemini-2.5-flash').replace(/[^a-z0-9.\-]/gi, '');
+  const model = String((await getSecret('GEMINI_MODEL')) || 'gemini-2.5-flash').replace(/[^a-z0-9.\-]/gi, '');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 25000);
   try {
