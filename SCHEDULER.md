@@ -22,7 +22,7 @@ Hobby permite cron somente uma vez por dia. Não coloque uma expressão de 5 min
 
 ## Central de Problemas no mesmo agendamento
 
-A execução agendada de `/api/infra-scan` também roda a Central de Problemas: aplica sozinha só as correções seguras (L2: rotinas de notificação deduplicadas e teste de conexão de integração), verifica se o problema sumiu, abre/atualiza incidentes `source=problems` para o que continua crítico/alto e mitiga os que desapareceram. O resultado fica em `dev_job_runs` (`job_key = problems.autofix`).
+A execução agendada de `/api/infra-scan` também roda a Central de Problemas: aplica sozinha só as correções seguras (L2: teste de conexão de integração). Rotinas que enviam notificação de cobrança à cliente **nunca** rodam sozinhas: exigem confirmação humana (L3), verifica se o problema sumiu, abre/atualiza incidentes `source=problems` para o que continua crítico/alto e mitiga os que desapareceram. O resultado fica em `dev_job_runs` (`job_key = problems.autofix`).
 
 ## Segurança
 

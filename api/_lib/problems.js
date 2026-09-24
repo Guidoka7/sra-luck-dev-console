@@ -205,10 +205,10 @@ function detectNotifications(data, out) {
   const lastOf = (tipo) => allLogs.filter(l => l.tipo === tipo).reduce((m, l) => (!m || new Date(l.created_at) > new Date(m) ? l.created_at : m), null);
   const freq = Math.max(1, Number(n.config?.frequencia_atraso_horas) || 24);
   if (n.config?.atraso_habilitado !== false && Number(n.atrasadas) > 0 && ageMs(lastOf('parcela_atrasada')) > (freq + 2) * HOUR) {
-    out.push(problem({ id: 'notificacoes:rotina-atraso', dominio: 'notificacoes', tipo: 'operacional', severidade: 'high', titulo: 'Rotina de lembrete de parcela atrasada parada', descricao: `${n.atrasadas} parcela(s) atrasada(s) e nenhum lembrete enviado nas últimas ${freq + 2}h.`, impacto: 'Clientes em atraso não estão sendo lembradas.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_atrasada') || 'nunca' }], acoes: [{ id: 'notificacoes.verificar_atrasos', label: 'Rodar rotina agora', tipo: 'seguro' }] }));
+    out.push(problem({ id: 'notificacoes:rotina-atraso', dominio: 'notificacoes', tipo: 'operacional', severidade: 'high', titulo: 'Rotina de lembrete de parcela atrasada parada', descricao: `${n.atrasadas} parcela(s) atrasada(s) e nenhum lembrete enviado nas últimas ${freq + 2}h.`, impacto: 'Clientes em atraso não estão sendo lembradas.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_atrasada') || 'nunca' }], acoes: [{ id: 'notificacoes.verificar_atrasos', label: 'Rodar rotina agora', tipo: 'confirmar', descricao: 'Envia lembretes reais às clientes em atraso (hoje: um por parcela). Só roda com a sua confirmação.' }] }));
   }
   if (Number(n.aVencer) > 0 && ageMs(lastOf('parcela_vencer')) > 26 * HOUR) {
-    out.push(problem({ id: 'notificacoes:rotina-vencimento', dominio: 'notificacoes', tipo: 'operacional', severidade: 'warning', titulo: 'Rotina de lembrete de vencimento sem execução recente', descricao: `${n.aVencer} parcela(s) vencem em até 2 dias e não houve lembrete nas últimas 26h.`, impacto: 'Clientes podem esquecer o vencimento.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_vencer') || 'nunca' }], acoes: [{ id: 'notificacoes.verificar_vencimentos', label: 'Rodar rotina agora', tipo: 'seguro' }] }));
+    out.push(problem({ id: 'notificacoes:rotina-vencimento', dominio: 'notificacoes', tipo: 'operacional', severidade: 'warning', titulo: 'Rotina de lembrete de vencimento sem execução recente', descricao: `${n.aVencer} parcela(s) vencem em até 2 dias e não houve lembrete nas últimas 26h.`, impacto: 'Clientes podem esquecer o vencimento.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_vencer') || 'nunca' }], acoes: [{ id: 'notificacoes.verificar_vencimentos', label: 'Rodar rotina agora', tipo: 'confirmar', descricao: 'Envia lembretes reais de vencimento (hoje: um por parcela). Só roda com a sua confirmação.' }] }));
   }
 }
 
@@ -342,8 +342,9 @@ async function detect(actor) {
 
 // Registro fechado de correções. O cliente só escolhe o id; rota e corpo são daqui.
 const ACTIONS = {
-  'notificacoes.verificar_atrasos': { permissao: 'notifications.manage', seguro: true, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_atrasos' }, ...ctx }) },
-  'notificacoes.verificar_vencimentos': { permissao: 'notifications.manage', seguro: true, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_momentos_especiais' }, ...ctx }) },
+  // Cobrança financeira nunca roda sozinha: exige confirmação humana (sem autoResolve).
+  'notificacoes.verificar_atrasos': { permissao: 'notifications.manage', seguro: false, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_atrasos' }, ...ctx }) },
+  'notificacoes.verificar_vencimentos': { permissao: 'notifications.manage', seguro: false, run: (ctx) => sraFetch('/api/admin/notificacoes/automacao', { method: 'POST', body: { acao: 'verificar_momentos_especiais' }, ...ctx }) },
   'integracoes.testar': {
     permissao: 'integrations.manage', seguro: true,
     run: async (ctx, prob) => {

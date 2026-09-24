@@ -37,7 +37,7 @@ A inteligência/execução 24x7 deve ficar server-side. O Dev Console é o contr
 
 ## Central de Problemas — IMPLEMENTADA
 
-Primeira versão combinada de System Health, Incident Manager, Notification Delivery, V46 Journey Guardian (detecção), Financial Integrity (fila de validação) e App Experience. Autonomia: L2 para rotinas idempotentes e testes de integração; L3 (confirmação humana) para liberação de acesso ao app; link para decisões de V46 e financeiro.
+Primeira versão combinada de System Health, Incident Manager, Notification Delivery, V46 Journey Guardian (detecção), Financial Integrity (fila de validação) e App Experience. Autonomia: L2 só para testes de integração; L3 (confirmação humana) para rotinas de notificação de cobrança e liberação de acesso ao app; link para decisões de V46 e financeiro.
 
 ## Infrastructure & Resource Guardian — IMPLEMENTADO NA BASE V1
 
