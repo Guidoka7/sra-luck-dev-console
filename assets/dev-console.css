@@ -356,3 +356,66 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}b
 @media(max-width:760px){.dc-ip-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dc-ip-map{grid-template-columns:1fr}}
 .dc-ip-grid .dc-ip-toggle{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;color:var(--ink)}
 .dc-ip-grid .dc-ip-toggle small{flex-basis:100%;margin-left:0;font-size:8.8px;color:var(--muted)}
+
+
+/* RD Station · configuração compacta */
+.dc-rd-import-form{gap:7px}
+.dc-rd-import-form .dc-ip-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.dc-rd-import-form .dc-ip-toggle{min-height:34px;padding:7px 9px;border:1px solid var(--line2);border-radius:9px;background:#0b1928}
+.dc-rd-import-form footer{position:sticky;bottom:0;z-index:3;margin:2px -2px -2px;padding:8px 2px 2px;background:linear-gradient(180deg,rgba(8,20,34,0),#081422 26%)}
+.dc-rd-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:1px 0 5px}
+.dc-rd-section-head>div{display:grid;gap:2px}
+.dc-rd-section-head b{font-size:10px;color:var(--ink)}
+.dc-rd-section-head small{font-size:8.5px;line-height:1.4;color:var(--muted);max-width:620px}
+.dc-rd-count{flex:none;display:inline-flex;align-items:center;height:21px;padding:0 7px;border:1px solid var(--line);border-radius:999px;background:#0c1d2f;color:#8fa8bf;font-size:8px;font-weight:700}
+.dc-rd-funnel-list{display:grid;gap:4px}
+.dc-rd-funil{border:1px solid var(--line2);border-radius:9px;background:#0a1726;overflow:hidden;transition:border-color .15s,background .15s}
+.dc-rd-funil.active{border-color:#304d69;background:#0b1b2c}
+.dc-rd-funil-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 8px}
+.dc-rd-funil-main{display:grid!important;grid-template-columns:16px minmax(0,1fr)!important;gap:7px!important;align-items:center!important;cursor:pointer;color:var(--ink)!important}
+.dc-rd-funil-main input{margin:0}
+.dc-rd-funil-main>span{display:grid;gap:1px;min-width:0}
+.dc-rd-funil-main b{font-size:9.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-rd-funil-main small{font-size:8px!important;color:var(--muted)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-rd-config-btn{height:25px;border:1px solid var(--line);border-radius:7px;background:#102238;color:#a8c0d7;padding:0 8px;font-size:8.2px;font-weight:700;cursor:pointer}
+.dc-rd-config-btn:hover:not(:disabled){border-color:#3c6080;color:#fff}
+.dc-rd-config-btn:disabled{opacity:.35;cursor:default}
+.dc-rd-funil-body{border-top:1px solid var(--line2);padding:8px;background:#081523}
+.dc-rd-subsection{display:grid;gap:6px}
+.dc-rd-subsection+.dc-rd-subsection{margin-top:7px;padding-top:7px;border-top:1px solid var(--line2)}
+.dc-rd-subhead{display:flex;align-items:center;gap:7px}
+.dc-rd-subhead b{font-size:9px;color:#d7e5f3}
+.dc-rd-subhead small{font-size:8px;color:var(--muted)}
+.dc-rd-stage-grid{gap:4px 8px}
+.dc-rd-stage-grid label{min-height:25px;padding:3px 6px;border:1px solid var(--line2);border-radius:7px;background:#0b1b2b;font-size:8.5px}
+.dc-rd-stage-grid label:has(input:checked){border-color:#3a5d7d;background:#10263c;color:#e8f3ff}
+.dc-rd-map-details,.dc-rd-default-map,.dc-rd-related{border:1px solid var(--line2);border-radius:9px;background:#0a1726;overflow:hidden}
+.dc-rd-map-details summary,.dc-rd-default-map summary,.dc-rd-related summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;color:#cbd9e7}
+.dc-rd-map-details summary::-webkit-details-marker,.dc-rd-default-map summary::-webkit-details-marker,.dc-rd-related summary::-webkit-details-marker{display:none}
+.dc-rd-map-details summary>span:first-child,.dc-rd-default-map summary>span:first-child,.dc-rd-related summary>span:first-child{display:grid;gap:1px}
+.dc-rd-map-details summary b,.dc-rd-default-map summary b,.dc-rd-related summary b{font-size:9.2px}
+.dc-rd-map-details summary small,.dc-rd-default-map summary small,.dc-rd-related summary small{font-size:8px;color:var(--muted);font-weight:400}
+.dc-rd-map-details summary>span:last-child,.dc-rd-default-map summary>span:last-child,.dc-rd-related summary>span:last-child{font-size:8px;color:#8fb7dd;white-space:nowrap}
+.dc-rd-map-details[open] summary,.dc-rd-default-map[open] summary,.dc-rd-related[open] summary{border-bottom:1px solid var(--line2);background:#0c1d2f}
+.dc-rd-map-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:8px}
+.dc-rd-map-grid label{display:grid!important;gap:3px!important;min-width:0}
+.dc-rd-map-grid label>span{font-size:8px;color:#89a0b7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dc-rd-map-grid select{width:100%;min-width:0;height:29px;border:1px solid var(--line);border-radius:7px;background:#081422;color:var(--ink);padding:0 7px;font-size:9px}
+.dc-rd-default-map>small{display:block;padding:0 9px 7px;font-size:8px!important;color:var(--muted)!important}
+.dc-rd-dedupe{display:flex!important;align-items:center;justify-content:space-between;gap:12px;padding:7px 9px;border:1px solid var(--line2);border-radius:9px;background:#0a1726}
+.dc-rd-dedupe>span{display:grid;gap:1px}
+.dc-rd-dedupe b{font-size:9.2px;color:var(--ink)}
+.dc-rd-dedupe small{font-size:8px!important}
+.dc-rd-related{margin-top:7px}
+.dc-rd-related-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line2)}
+.dc-rd-related-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;padding:7px 8px;background:#0a1726}
+.dc-rd-related-row>div{display:grid;gap:2px}
+.dc-rd-related-row b{font-size:9px}
+.dc-rd-related-row small{font-size:7.8px;color:var(--muted);line-height:1.35}
+.dc-rd-related-row>span{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:760px){
+  .dc-rd-import-form .dc-ip-grid{grid-template-columns:1fr}
+  .dc-rd-map-grid,.dc-rd-related-grid{grid-template-columns:1fr}
+  .dc-rd-dedupe{display:grid!important}
+  .dc-rd-funil-row{grid-template-columns:minmax(0,1fr) auto}
+}
