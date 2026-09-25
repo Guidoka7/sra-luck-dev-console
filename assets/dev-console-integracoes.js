@@ -64,36 +64,52 @@
     const funis = op?.funis || [];
     if (!funis.length) return '<div class="dc-ip-full"><div class="dc-warn-box">Nenhum funil foi retornado pelo RD Station.</div></div>';
 
-    return `<div class="dc-ip-full">
-      <span>${esc(campo.rotulo)}</span>
-      <small class="dc-muted" style="display:block;margin:3px 0 8px">${esc(campo.ajuda || '')}</small>
-      <div class="dc-ip-list">
-        ${funis.map((funil) => {
+    const mapaAlterado = (mapa) => (campo.itens || []).filter((it) => {
+      const atual = mapa?.[it.chave] ?? 'auto';
+      const padrao = mapaPadrao?.[it.chave] ?? 'auto';
+      return atual !== padrao;
+    }).length;
+    const ordenados = [...funis].sort((a, b) => {
+      const aa = configurados.some((x) => x.pipelineId === a.id) ? 0 : 1;
+      const bb = configurados.some((x) => x.pipelineId === b.id) ? 0 : 1;
+      return aa - bb || String(a.nome).localeCompare(String(b.nome), 'pt-BR');
+    });
+
+    return `<div class="dc-ip-full dc-rd-funnels">
+      <div class="dc-rd-section-head">
+        <div><b>${esc(campo.rotulo)}</b><small>${esc(campo.ajuda || '')}</small></div>
+        <span class="dc-rd-count">${configurados.length ? `${configurados.length} selecionado(s)` : 'Todos os funis'}</span>
+      </div>
+      <div class="dc-rd-funnel-list">
+        ${ordenados.map((funil) => {
           const cfg = configurados.find((x) => x.pipelineId === funil.id) || null;
           const marcado = Boolean(cfg);
           const etapasMarcadas = Array.isArray(cfg?.etapas) ? cfg.etapas : [];
           const mapa = cfg?.mapeamento || mapaPadrao;
-          return `<div class="dc-rd-funil" style="border:1px solid var(--line);border-radius:12px;padding:10px 12px">
-            <label style="display:flex;align-items:center;gap:9px;font-weight:700;cursor:pointer">
-              <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
-              <span style="flex:1">${esc(funil.nome)}</span>
-              <small class="dc-muted">${(funil.etapas || []).length} etapa(s)</small>
-            </label>
-            <div data-rd-funil-body="${esc(funil.id)}"${marcado ? '' : ' hidden'} style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
-              <div style="margin-bottom:10px">
-                <b style="font-size:12px">Etapas sincronizadas</b>
-                <small class="dc-muted" style="display:block;margin:2px 0 6px">Nenhuma marcada = todas as etapas deste funil.</small>
-                <div class="dc-ip-checks">
-                  ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/>${esc(etapa.nome)}</label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
+          const totalEtapas = (funil.etapas || []).length;
+          const resumoEtapas = etapasMarcadas.length ? `${etapasMarcadas.length}/${totalEtapas} etapas` : `Todas as ${totalEtapas} etapas`;
+          const alterados = mapaAlterado(mapa);
+          return `<div class="dc-rd-funil${marcado ? ' active' : ''}">
+            <div class="dc-rd-funil-row">
+              <label class="dc-rd-funil-main">
+                <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
+                <span><b>${esc(funil.nome)}</b><small>${marcado ? `${resumoEtapas} · ${alterados ? `${alterados} campo(s) personalizado(s)` : 'preenchimento padrão'}` : `${totalEtapas} etapa(s)`}</small></span>
+              </label>
+              <button type="button" class="dc-rd-config-btn" data-rd-funil-open="${esc(funil.id)}" aria-expanded="false"${marcado ? '' : ' disabled'}>Configurar</button>
+            </div>
+            <div class="dc-rd-funil-body" data-rd-funil-body="${esc(funil.id)}" hidden>
+              <section class="dc-rd-subsection">
+                <div class="dc-rd-subhead"><b>Etapas</b><small>Nenhuma marcada = todas.</small></div>
+                <div class="dc-ip-checks dc-rd-stage-grid">
+                  ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/><span>${esc(etapa.nome)}</span></label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
                 </div>
-              </div>
-              <div>
-                <b style="font-size:12px">Preenchimento dos dados neste funil</b>
-                <small class="dc-muted" style="display:block;margin:2px 0 6px">Escolha de onde cada campo da Sra. Luck será preenchido.</small>
-                <div class="dc-ip-map">
-                  ${(campo.itens || []).map((it) => `<span>${esc(it.rotulo)}</span><select data-rd-map data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"${dis}>${opcoesHtml(fontes, mapa?.[it.chave] ?? 'auto', false)}</select>`).join('')}
+              </section>
+              <details class="dc-rd-subsection dc-rd-map-details">
+                <summary><span><b>Preenchimento dos dados</b><small>${alterados ? `${alterados} diferente(s) do padrão` : 'Usando o preenchimento padrão'}</small></span><span>Editar campos</span></summary>
+                <div class="dc-rd-map-grid">
+                  ${(campo.itens || []).map((it) => `<label><span>${esc(it.rotulo)}</span><select data-rd-map data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"${dis}>${opcoesHtml(fontes, mapa?.[it.chave] ?? 'auto', false)}</select></label>`).join('')}
                 </div>
-              </div>
+              </details>
             </div>
           </div>`;
         }).join('')}
@@ -118,9 +134,20 @@
       }
       case 'mapeamento': {
         const fontes = lista(campo, op, valores);
-        return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-map">${(campo.itens || []).map((it) => `<span>${esc(it.rotulo)}</span><select data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="mapa"${dis}>${opcoesHtml(fontes.length ? fontes : [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }], v?.[it.chave] ?? 'auto', false)}</select>`).join('')}</div>${aj}</div>`;
+        const itens = fontes.length ? fontes : [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }];
+        if (f.id === 'importacao' && campo.chave === 'mapeamento') {
+          const personalizados = (campo.itens || []).filter((it) => (v?.[it.chave] ?? 'auto') !== 'auto').length;
+          return `<details class="dc-ip-full dc-rd-default-map">
+            <summary><span><b>${esc(rot)}</b><small>${personalizados ? `${personalizados} campo(s) personalizado(s)` : 'Todos os campos em Automático'}</small></span><span>Editar</span></summary>
+            <div class="dc-rd-map-grid">${(campo.itens || []).map((it) => `<label><span>${esc(it.rotulo)}</span><select data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="mapa"${dis}>${opcoesHtml(itens, v?.[it.chave] ?? 'auto', false)}</select></label>`).join('')}</div>
+            ${aj}
+          </details>`;
+        }
+        return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-map">${(campo.itens || []).map((it) => `<span>${esc(it.rotulo)}</span><select data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="mapa"${dis}>${opcoesHtml(itens, v?.[it.chave] ?? 'auto', false)}</select>`).join('')}</div>${aj}</div>`;
       }
-      case 'grupo_booleano': return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div>${aj}</div>`;
+      case 'grupo_booleano':
+        if (f.id === 'importacao' && campo.chave === 'deduplicarPor') return `<div class="dc-ip-full dc-rd-dedupe"><span><b>${esc(rot)}</b><small>Evita criar a mesma cliente novamente.</small></span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div></div>`;
+        return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div>${aj}</div>`;
       case 'rd_funis': return rdFunisHtml(campo, valores, op, dis);
       default: return '';
     }
@@ -132,7 +159,7 @@
     const uso = campos.some((x) => x.chave === 'limiteDiario') ? (c.limiteDiario ? `${f.usoHoje}/${c.limiteDiario} chamadas hoje` : `${f.usoHoje} chamada(s) hoje · sem limite`) : '';
     const rodape = !editavelAqui ? '<small class="dc-muted">Esta função não possui parâmetros configuráveis.</small>'
       : pode ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Seu acesso não permite alterar.</small>';
-    return `<form class="dc-ip-form" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
+    return `<form class="dc-ip-form${i.id === 'rd_station' && f.id === 'importacao' ? ' dc-rd-import-form' : ''}" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
       ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)}</div>` : ''}
       ${uso ? `<small class="dc-muted">${esc(uso)}</small>` : ''}
       <div class="dc-ip-grid">${campos.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</div>
@@ -173,12 +200,20 @@
   }
 
   function abaFuncoes(i) {
-    return i.funcoes.map((f) => `<article class="dc-ip-fn ${f.situacao}">
+    const card = (f) => `<article class="dc-ip-fn ${f.situacao}">
       <header><strong>${esc(f.nome)}</strong>${chip(f.situacao)}${DC.chip(DIRECAO[f.direcao] || f.direcao, 'neutral')}</header>
       <p>${esc(f.descricao)}</p>
       ${f.motivo ? `<p class="dc-ip-motivo">${esc(f.motivo)}</p>` : ''}
       ${f.config ? `<div data-form="${esc(f.id)}"><div class="dc-muted" style="margin-top:8px">Carregando configuração…</div></div>` : ''}
-    </article>`).join('');
+    </article>`;
+    if (i.id !== 'rd_station') return i.funcoes.map(card).join('');
+    const principais = i.funcoes.filter((f) => f.config);
+    const auxiliares = i.funcoes.filter((f) => !f.config);
+    return `${principais.map(card).join('')}
+      ${auxiliares.length ? `<details class="dc-rd-related">
+        <summary><span><b>Recursos do RD</b><small>Filtros, deduplicação, avanço e webhook</small></span><span>${auxiliares.length} recursos</span></summary>
+        <div class="dc-rd-related-grid">${auxiliares.map((f) => `<div class="dc-rd-related-row"><div><b>${esc(f.nome)}</b><small>${esc(f.descricao)}</small>${f.motivo ? `<small class="dc-ip-motivo">${esc(f.motivo)}</small>` : ''}</div><span>${chip(f.situacao)}${DC.chip(DIRECAO[f.direcao] || f.direcao, 'neutral')}</span></div>`).join('')}</div>
+      </details>` : ''}`;
   }
 
   async function preencherFormularios(ov, i) {
@@ -338,9 +373,26 @@
       if (!toggle) return;
       const card = toggle.closest('.dc-rd-funil');
       const corpo = card?.querySelector('[data-rd-funil-body]');
-      if (corpo) corpo.hidden = !toggle.checked;
+      const abrir = card?.querySelector('[data-rd-funil-open]');
+      card?.classList.toggle('active', toggle.checked);
+      if (abrir) abrir.disabled = !toggle.checked;
+      if (!toggle.checked && corpo) {
+        corpo.hidden = true;
+        if (abrir) { abrir.setAttribute('aria-expanded', 'false'); abrir.textContent = 'Configurar'; }
+      }
     });
     ov.addEventListener('click', async (e) => {
+      const abrirFunil = e.target.closest?.('[data-rd-funil-open]');
+      if (abrirFunil) {
+        const card = abrirFunil.closest('.dc-rd-funil');
+        const corpo = card?.querySelector('[data-rd-funil-body]');
+        if (!corpo) return;
+        const vaiAbrir = corpo.hidden;
+        corpo.hidden = !vaiAbrir;
+        abrirFunil.setAttribute('aria-expanded', vaiAbrir ? 'true' : 'false');
+        abrirFunil.textContent = vaiAbrir ? 'Fechar' : 'Configurar';
+        return;
+      }
       const b = e.target.closest('[data-aba]');
       if (b) {
         S.aba = { id, aba: b.dataset.aba };
