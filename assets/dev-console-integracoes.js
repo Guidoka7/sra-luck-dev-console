@@ -182,7 +182,63 @@
       <h3 class="dc-nc-h">Execuções</h3><div class="dc-ip-list">${(hist.data?.itens || []).slice(0, 20).map((e) => `<div class="dc-ip-row"><b>${esc(String(e.event_type).replace(/_/g, ' '))}</b><span>${esc(quando(e.created_at))}${e.erro ? `<small>${esc(e.erro)}</small>` : e.payload?.leitura ? `<small>${e.payload.leitura.eventos} evento(s) · ${e.payload.leitura.baixasAplicadas} baixa(s) aplicada(s) · ${e.payload.leitura.conflitos} conflito(s) · ${e.payload.envio?.enfileiradas ?? 0} envio(s)</small>` : ''}</span>${DC.chip(e.status, e.status === 'processado' ? 'ok' : e.status === 'erro' ? 'bad' : 'warn')}</div>`).join('') || '<div class="dc-empty">Nenhuma execução registrada.</div>'}</div>`;
   }
 
-  const EXTRAS = { rd_station: [['importacoes', 'Importações', abaCrm]], conta_azul: [['operacao', 'Operação', abaContaAzul]] };
+  async function abaRdOperacao(alvo) {
+    const [imps, hist] = await Promise.all([
+      DC.api('/api/admin/integrations/rd-station/importacoes'),
+      DC.api('/api/admin/integrations/historico'),
+    ]);
+    const status = (I.status?.integracoes || []).find((x) => x.id === 'rd_station') || {};
+    const cred = (I.creds?.provedores || []).find((x) => x.id === 'rd_station') || {};
+    const campos = cred.campos || [];
+    const configurada = (chave) => campos.find((x) => x.chave === chave)?.origem !== 'nao_configurado';
+    const oauth = configurada('access_token') && configurada('refresh_token');
+    const basePronta = Boolean(imps.ok && imps.data?.disponivel !== false && status.estado !== 'base_incompleta' && status.estadoValidacao !== 'base_incompleta');
+    const validada = status.conexaoLiveVerificada === true;
+    const ativa = status.ativo === true && validada && basePronta;
+    const lista = imps.ok ? (imps.data?.importacoes || []) : [];
+    const concluidas = lista.filter((x) => x.status === 'concluida').length;
+    const falhas = lista.filter((x) => x.status === 'erro').length;
+    const parciais = lista.filter((x) => x.status === 'parcial' || x.status === 'parcialmente_concluida').length;
+    const totais = lista.reduce((acc, x) => {
+      acc.lidas += Number(x.totais?.totalRd || 0);
+      acc.criadas += Number(x.totais?.criadas || 0);
+      acc.duplicadas += Number(x.totais?.duplicadas || 0) + Number(x.totais?.clienteExistente || 0);
+      return acc;
+    }, { lidas: 0, criadas: 0, duplicadas: 0 });
+    const ultima = lista[0] || null;
+    const eventos = (hist.ok ? (hist.data?.eventos || []) : [])
+      .filter((e) => e.entidade_id === 'rd_station' || e.detalhes?.provedor === 'rd_station')
+      .slice(0, 30);
+    const gate = [
+      ['Credenciais OAuth', (cred.campos || []).filter((x) => x.obrigatorio).every((x) => x.origem !== 'nao_configurado'), 'Client ID, Client Secret, Redirect URI e segredo do webhook'],
+      ['Conta autorizada', oauth, 'Access Token e Refresh Token presentes no cofre'],
+      ['Persistência', basePronta, 'estrutura de importações disponível no backend'],
+      ['Teste real', validada, 'último teste autenticado aprovado'],
+    ];
+    alvo.innerHTML = `
+      <div class="dc-note"><b>RD Station CRM v2.</b> O Dev Console usa somente capacidades que o backend do Sra Luck já implementa. A API do RD possui operações de escrita, mas o projeto mantém o RD em <b>somente leitura</b>; por isso nenhuma ação de criar/alterar negócio ou contato é exposta aqui.</div>
+      <h3 class="dc-nc-h">Pré-requisitos de ativação</h3>
+      <div class="dc-ip-list">${gate.map(([nome, ok, detalhe]) => `<div class="dc-ip-row"><b>${esc(nome)}</b><span>${esc(detalhe)}</span>${DC.chip(ok ? 'OK' : 'Pendente', ok ? 'ok' : 'warn')}</div>`).join('')}</div>
+      ${ativa ? '' : '<div class="dc-warn-box" style="margin-top:8px">A automação permanece bloqueada enquanto houver pré-requisito pendente. O botão de ativação executa uma validação real no provedor; falha de autenticação mantém a integração desligada.</div>'}
+      <h3 class="dc-nc-h">Monitoramento operacional</h3>
+      <div class="dc-ip-kpis">
+        <div><small>Última sincronização</small><b>${ultima?.iniciado_em ? esc(quando(ultima.iniciado_em)) : 'nunca'}</b></div>
+        <div><small>Latência do último teste</small><b>${status.latenciaMs != null ? esc(status.latenciaMs + ' ms') : '—'}</b></div>
+        <div><small>Concluídas</small><b>${concluidas}</b></div>
+        <div><small>Falhas / parciais</small><b>${falhas} / ${parciais}</b></div>
+      </div>
+      <div class="dc-ip-kpis" style="margin-top:8px">
+        <div><small>Negociações lidas</small><b>${totais.lidas}</b></div>
+        <div><small>Novas</small><b>${totais.criadas}</b></div>
+        <div><small>Duplicidades</small><b>${totais.duplicadas}</b></div>
+        <div><small>Retentativas</small><b>Não há fila</b></div>
+      </div>
+      <p class="dc-ov-p dc-muted">O backend atual do RD não possui fila genérica de retries. Cada importação é uma execução independente; falhas ficam registradas no histórico para novo disparo manual ou pela próxima execução agendada.</p>
+      <h3 class="dc-nc-h">Logs recentes</h3>
+      <div class="dc-ip-list">${eventos.map((e) => `<div class="dc-ip-row"><b>${esc(String(e.acao || e.event_type || 'evento').replace(/_/g, ' '))}</b><span>${esc(e.detalhes?.detalhe || e.detalhes?.erro || e.erro || '')}</span><small>${esc(quando(e.created_at))}</small></div>`).join('') || '<div class="dc-empty">Sem eventos recentes do RD Station.</div>'}</div>`;
+  }
+
+  const EXTRAS = { rd_station: [['operacao', 'Monitoramento', abaRdOperacao], ['importacoes', 'Importações', abaCrm]], conta_azul: [['operacao', 'Operação', abaContaAzul]] };
 
   // ------------------------------------------------------------------ drawer
 
