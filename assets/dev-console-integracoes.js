@@ -69,51 +69,66 @@
       const padrao = mapaPadrao?.[it.chave] ?? 'auto';
       return atual !== padrao;
     }).length;
-    const ordenados = [...funis].sort((a, b) => {
-      const aa = configurados.some((x) => x.pipelineId === a.id) ? 0 : 1;
-      const bb = configurados.some((x) => x.pipelineId === b.id) ? 0 : 1;
-      return aa - bb || String(a.nome).localeCompare(String(b.nome), 'pt-BR');
-    });
+
+    const funilHtml = (funil) => {
+      const cfg = configurados.find((x) => x.pipelineId === funil.id) || null;
+      const marcado = Boolean(cfg);
+      const etapasMarcadas = Array.isArray(cfg?.etapas) ? cfg.etapas : [];
+      const mapa = cfg?.mapeamento || mapaPadrao;
+      const totalEtapas = (funil.etapas || []).length;
+      const resumoEtapas = etapasMarcadas.length ? `${etapasMarcadas.length}/${totalEtapas} etapas` : `Todas as ${totalEtapas} etapas`;
+      const alterados = mapaAlterado(mapa);
+      return `<div class="dc-rd-funil${marcado ? ' active' : ''}">
+        <div class="dc-rd-funil-row">
+          <label class="dc-rd-funil-main">
+            <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
+            <span><b>${esc(funil.nome)}</b><small>${marcado ? `${resumoEtapas} · ${alterados ? `${alterados} campo(s) personalizado(s)` : 'preenchimento padrão'}` : `${totalEtapas} etapa(s)`}</small></span>
+          </label>
+          <button type="button" class="dc-rd-config-btn" data-rd-funil-open="${esc(funil.id)}" aria-expanded="false"${marcado ? '' : ' disabled'}>Configurar</button>
+        </div>
+        <div class="dc-rd-funil-body" data-rd-funil-body="${esc(funil.id)}" hidden>
+          <section class="dc-rd-subsection">
+            <div class="dc-rd-subhead"><b>Etapas</b><small>Nenhuma marcada = todas.</small></div>
+            <div class="dc-ip-checks dc-rd-stage-grid">
+              ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/><span>${esc(etapa.nome)}</span></label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
+            </div>
+          </section>
+          <details class="dc-rd-subsection dc-rd-map-details">
+            <summary><span><b>Preenchimento dos dados</b><small>${alterados ? `${alterados} diferente(s) do padrão` : 'Usando o preenchimento padrão'}</small></span><span>Editar campos</span></summary>
+            <div class="dc-rd-map-grid">
+              ${(campo.itens || []).map((it) => `<label><span>${esc(it.rotulo)}</span><select data-rd-map data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"${dis}>${opcoesHtml(fontes, mapa?.[it.chave] ?? 'auto', false)}</select></label>`).join('')}
+            </div>
+          </details>
+        </div>
+      </div>`;
+    };
+
+    const selecionados = funis.filter((f) => configurados.some((x) => x.pipelineId === f.id));
+    const restantes = funis
+      .filter((f) => !configurados.some((x) => x.pipelineId === f.id))
+      .sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+
+    const listaSelecionados = selecionados.length
+      ? `<div class="dc-rd-selected">
+          <div class="dc-rd-group-label"><span>Selecionados</span><small>${selecionados.length} funil(is)</small></div>
+          <div class="dc-rd-funnel-list">${selecionados.map(funilHtml).join('')}</div>
+        </div>`
+      : `<div class="dc-rd-fallback-note"><b>Todos os funis</b><span>Nenhum funil específico foi marcado. A importação usa o preenchimento padrão em todos.</span></div>`;
+
+    const seletorRestantes = restantes.length
+      ? `<details class="dc-rd-more-funnels">
+          <summary><span><b>${selecionados.length ? 'Adicionar outros funis' : 'Escolher funis específicos'}</b><small>${selecionados.length ? 'Os demais ficam fora da seleção atual.' : 'Ao selecionar, a importação passa a usar somente os funis marcados.'}</small></span><span>${restantes.length} disponível(is)</span></summary>
+          <div class="dc-rd-funnel-list">${restantes.map(funilHtml).join('')}</div>
+        </details>`
+      : '';
 
     return `<div class="dc-ip-full dc-rd-funnels">
       <div class="dc-rd-section-head">
         <div><b>${esc(campo.rotulo)}</b><small>${esc(campo.ajuda || '')}</small></div>
         <span class="dc-rd-count">${configurados.length ? `${configurados.length} selecionado(s)` : 'Todos os funis'}</span>
       </div>
-      <div class="dc-rd-funnel-list">
-        ${ordenados.map((funil) => {
-          const cfg = configurados.find((x) => x.pipelineId === funil.id) || null;
-          const marcado = Boolean(cfg);
-          const etapasMarcadas = Array.isArray(cfg?.etapas) ? cfg.etapas : [];
-          const mapa = cfg?.mapeamento || mapaPadrao;
-          const totalEtapas = (funil.etapas || []).length;
-          const resumoEtapas = etapasMarcadas.length ? `${etapasMarcadas.length}/${totalEtapas} etapas` : `Todas as ${totalEtapas} etapas`;
-          const alterados = mapaAlterado(mapa);
-          return `<div class="dc-rd-funil${marcado ? ' active' : ''}">
-            <div class="dc-rd-funil-row">
-              <label class="dc-rd-funil-main">
-                <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
-                <span><b>${esc(funil.nome)}</b><small>${marcado ? `${resumoEtapas} · ${alterados ? `${alterados} campo(s) personalizado(s)` : 'preenchimento padrão'}` : `${totalEtapas} etapa(s)`}</small></span>
-              </label>
-              <button type="button" class="dc-rd-config-btn" data-rd-funil-open="${esc(funil.id)}" aria-expanded="false"${marcado ? '' : ' disabled'}>Configurar</button>
-            </div>
-            <div class="dc-rd-funil-body" data-rd-funil-body="${esc(funil.id)}" hidden>
-              <section class="dc-rd-subsection">
-                <div class="dc-rd-subhead"><b>Etapas</b><small>Nenhuma marcada = todas.</small></div>
-                <div class="dc-ip-checks dc-rd-stage-grid">
-                  ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/><span>${esc(etapa.nome)}</span></label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
-                </div>
-              </section>
-              <details class="dc-rd-subsection dc-rd-map-details">
-                <summary><span><b>Preenchimento dos dados</b><small>${alterados ? `${alterados} diferente(s) do padrão` : 'Usando o preenchimento padrão'}</small></span><span>Editar campos</span></summary>
-                <div class="dc-rd-map-grid">
-                  ${(campo.itens || []).map((it) => `<label><span>${esc(it.rotulo)}</span><select data-rd-map data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"${dis}>${opcoesHtml(fontes, mapa?.[it.chave] ?? 'auto', false)}</select></label>`).join('')}
-                </div>
-              </details>
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
+      ${listaSelecionados}
+      ${seletorRestantes}
     </div>`;
   }
 
@@ -159,7 +174,30 @@
     const uso = campos.some((x) => x.chave === 'limiteDiario') ? (c.limiteDiario ? `${f.usoHoje}/${c.limiteDiario} chamadas hoje` : `${f.usoHoje} chamada(s) hoje · sem limite`) : '';
     const rodape = !editavelAqui ? '<small class="dc-muted">Esta função não possui parâmetros configuráveis.</small>'
       : pode ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Seu acesso não permite alterar.</small>';
-    return `<form class="dc-ip-form${i.id === 'rd_station' && f.id === 'importacao' ? ' dc-rd-import-form' : ''}" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
+    const rdImport = i.id === 'rd_station' && f.id === 'importacao';
+
+    if (rdImport) {
+      const principais = campos.filter((campo) => !['mapeamento', 'rd_funis', 'grupo_booleano'].includes(campo.tipo));
+      const padrao = campos.filter((campo) => campo.tipo === 'mapeamento');
+      const funis = campos.filter((campo) => campo.tipo === 'rd_funis');
+      const dedupe = campos.filter((campo) => campo.tipo === 'grupo_booleano');
+      return `<form class="dc-ip-form dc-rd-import-form" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
+        ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)}</div>` : ''}
+        ${uso ? `<small class="dc-muted">${esc(uso)}</small>` : ''}
+        <div class="dc-rd-config-stack">
+          <section class="dc-rd-block">
+            <div class="dc-rd-block-head"><div><b>Importação automática</b><small>Ativação, frequência e status das negociações lidas no RD.</small></div></div>
+            <div class="dc-ip-grid dc-rd-control-grid">${principais.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</div>
+          </section>
+          ${padrao.length ? `<section class="dc-rd-block dc-rd-block-flat">${padrao.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</section>` : ''}
+          ${funis.length ? `<section class="dc-rd-block dc-rd-block-flat">${funis.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</section>` : ''}
+          ${dedupe.length ? `<section class="dc-rd-block dc-rd-block-flat">${dedupe.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</section>` : ''}
+        </div>
+        <footer><small class="dc-muted">${f.versao ? `Versão ${f.versao} · ${f.atualizadoEm ? DC.relTime(f.atualizadoEm) : ''}` : 'Sem configuração salva: valem os padrões do sistema.'}</small>${rodape}</footer>
+      </form>`;
+    }
+
+    return `<form class="dc-ip-form" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
       ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)}</div>` : ''}
       ${uso ? `<small class="dc-muted">${esc(uso)}</small>` : ''}
       <div class="dc-ip-grid">${campos.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</div>
@@ -209,9 +247,16 @@
     if (i.id !== 'rd_station') return i.funcoes.map(card).join('');
     const principais = i.funcoes.filter((f) => f.config);
     const auxiliares = i.funcoes.filter((f) => !f.config);
-    return `${principais.map(card).join('')}
+    const principal = (f) => `<article class="dc-ip-fn dc-rd-primary-function ${f.situacao}">
+      <header class="dc-rd-primary-head">
+        <div class="dc-rd-primary-copy"><strong>${esc(f.nome)}</strong><p>${esc(f.descricao)}</p>${f.motivo ? `<small class="dc-ip-motivo">${esc(f.motivo)}</small>` : ''}</div>
+        <div class="dc-rd-primary-badges">${chip(f.situacao)}${DC.chip(DIRECAO[f.direcao] || f.direcao, 'neutral')}</div>
+      </header>
+      ${f.config ? `<div data-form="${esc(f.id)}"><div class="dc-muted" style="margin-top:8px">Carregando configuração…</div></div>` : ''}
+    </article>`;
+    return `<div class="dc-rd-functions-shell">${principais.map(principal).join('')}</div>
       ${auxiliares.length ? `<details class="dc-rd-related">
-        <summary><span><b>Recursos do RD</b><small>Filtros, deduplicação, avanço e webhook</small></span><span>${auxiliares.length} recursos</span></summary>
+        <summary><span><b>Recursos técnicos relacionados</b><small>Deduplicação, avanço da venda, webhook e limitações da API</small></span><span>${auxiliares.length} recursos</span></summary>
         <div class="dc-rd-related-grid">${auxiliares.map((f) => `<div class="dc-rd-related-row"><div><b>${esc(f.nome)}</b><small>${esc(f.descricao)}</small>${f.motivo ? `<small class="dc-ip-motivo">${esc(f.motivo)}</small>` : ''}</div><span>${chip(f.situacao)}${DC.chip(DIRECAO[f.direcao] || f.direcao, 'neutral')}</span></div>`).join('')}</div>
       </details>` : ''}`;
   }
