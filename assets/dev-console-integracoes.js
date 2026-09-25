@@ -57,6 +57,50 @@
     return `${vazio ? '<option value="">—</option>' : ''}${l.map((o) => `<option value="${esc(o.valor)}"${String(o.valor) === String(atual ?? '') ? ' selected' : ''}>${esc(o.rotulo)}</option>`).join('')}`;
   };
 
+  function rdFunisHtml(campo, valores, op, dis) {
+    const configurados = Array.isArray(valores.funis) ? valores.funis : [];
+    const mapaPadrao = valores.mapeamento || {};
+    const fontes = [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }, ...(op?.campos || []).map((c) => ({ valor: `${c.entidade}:${c.slug}`, rotulo: `${c.entidade === 'deal' ? 'Negociação' : 'Contato'}: ${c.nome}` }))];
+    const funis = op?.funis || [];
+    if (!funis.length) return '<div class="dc-ip-full"><div class="dc-warn-box">Nenhum funil foi retornado pelo RD Station.</div></div>';
+
+    return `<div class="dc-ip-full">
+      <span>${esc(campo.rotulo)}</span>
+      <small class="dc-muted" style="display:block;margin:3px 0 8px">${esc(campo.ajuda || '')}</small>
+      <div class="dc-ip-list">
+        ${funis.map((funil) => {
+          const cfg = configurados.find((x) => x.pipelineId === funil.id) || null;
+          const marcado = Boolean(cfg);
+          const etapasMarcadas = Array.isArray(cfg?.etapas) ? cfg.etapas : [];
+          const mapa = cfg?.mapeamento || mapaPadrao;
+          return `<div class="dc-rd-funil" style="border:1px solid var(--line);border-radius:12px;padding:10px 12px">
+            <label style="display:flex;align-items:center;gap:9px;font-weight:700;cursor:pointer">
+              <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
+              <span style="flex:1">${esc(funil.nome)}</span>
+              <small class="dc-muted">${(funil.etapas || []).length} etapa(s)</small>
+            </label>
+            <div data-rd-funil-body="${esc(funil.id)}"${marcado ? '' : ' hidden'} style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+              <div style="margin-bottom:10px">
+                <b style="font-size:12px">Etapas sincronizadas</b>
+                <small class="dc-muted" style="display:block;margin:2px 0 6px">Nenhuma marcada = todas as etapas deste funil.</small>
+                <div class="dc-ip-checks">
+                  ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/>${esc(etapa.nome)}</label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
+                </div>
+              </div>
+              <div>
+                <b style="font-size:12px">Preenchimento dos dados neste funil</b>
+                <small class="dc-muted" style="display:block;margin:2px 0 6px">Escolha de onde cada campo da Sra. Luck será preenchido.</small>
+                <div class="dc-ip-map">
+                  ${(campo.itens || []).map((it) => `<span>${esc(it.rotulo)}</span><select data-rd-map data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"${dis}>${opcoesHtml(fontes, mapa?.[it.chave] ?? 'auto', false)}</select>`).join('')}
+                </div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
   function campoHtml(f, campo, valores, op, dis) {
     const v = valores[campo.chave];
     let [rot, ajuda] = [campo.rotulo, campo.ajuda || ''];
@@ -77,6 +121,7 @@
         return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-map">${(campo.itens || []).map((it) => `<span>${esc(it.rotulo)}</span><select data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="mapa"${dis}>${opcoesHtml(fontes.length ? fontes : [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }], v?.[it.chave] ?? 'auto', false)}</select>`).join('')}</div>${aj}</div>`;
       }
       case 'grupo_booleano': return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div>${aj}</div>`;
+      case 'rd_funis': return rdFunisHtml(campo, valores, op, dis);
       default: return '';
     }
   }
@@ -109,6 +154,21 @@
       else if (t === 'grupo') { cfg[k] = cfg[k] || {}; cfg[k][el.dataset.sub] = el.checked; }
     });
     (f.campos || []).filter((c) => c.tipo === 'multi_selecao').forEach((c) => { if (!(c.chave in cfg)) cfg[c.chave] = []; });
+
+    if ((f.campos || []).some((c) => c.tipo === 'rd_funis')) {
+      cfg.funis = [];
+      form.querySelectorAll('[data-rd-funil-toggle]:checked').forEach((toggle) => {
+        const pipelineId = toggle.value;
+        const card = toggle.closest('.dc-rd-funil');
+        const etapas = [...(card?.querySelectorAll('[data-rd-stage]:checked') || [])].map((x) => x.value);
+        const mapeamento = {};
+        (card?.querySelectorAll('[data-rd-map]') || []).forEach((sel) => { mapeamento[sel.dataset.sub] = sel.value; });
+        cfg.funis.push({ pipelineId, etapas, mapeamento });
+      });
+      // Garante que a configuração nova substitua o formato antigo de um único funil.
+      cfg.pipelineId = null;
+      cfg.etapas = [];
+    }
     return cfg;
   }
 
@@ -273,6 +333,13 @@
     };
     carregarExtra(ativa);
     void preencherFormularios(ov, i);
+    ov.addEventListener('change', (e) => {
+      const toggle = e.target.closest?.('[data-rd-funil-toggle]');
+      if (!toggle) return;
+      const card = toggle.closest('.dc-rd-funil');
+      const corpo = card?.querySelector('[data-rd-funil-body]');
+      if (corpo) corpo.hidden = !toggle.checked;
+    });
     ov.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-aba]');
       if (b) {
