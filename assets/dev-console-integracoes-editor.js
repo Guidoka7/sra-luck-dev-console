@@ -21,12 +21,39 @@
     if (!p) return '<div class="dc-empty">Catálogo de credenciais indisponível.</div>';
     if (id === 'web_push') return editorVapid(p);
 
-    const campos = (p.campos || []).map((c) => {
+    const status = (I.status?.integracoes || []).find((x) => x.id === id) || {};
+    const historico = (I.history || []).filter((h) => h.entidade_id === id || h.detalhes?.provedor === id);
+    const ultimoTeste = historico.find((h) => h.acao === 'testou_conexao_integracao') || null;
+    const testeAprovado = ultimoTeste?.detalhes?.conectado === true;
+    const obrigatoriasOk = (p.campos || []).filter((x) => x.obrigatorio).every((x) => x.origem !== 'nao_configurado');
+    const rdOAuthOk = id !== 'rd_station' || (
+      (p.campos || []).find((x) => x.chave === 'access_token')?.origem !== 'nao_configurado' &&
+      (p.campos || []).find((x) => x.chave === 'refresh_token')?.origem !== 'nao_configurado'
+    );
+    const baseOk = id !== 'rd_station' || !['base_incompleta'].includes(status.estadoValidacao || status.estado);
+    const bloqueada = p.ativo !== true && (!obrigatoriasOk || !rdOAuthOk || !baseOk);
+
+    const credencialHtml = (c, compacta = false) => {
       const inputId = `cred-${id}-${c.chave}`;
       const type = textoVisivel.has(c.chave) ? 'text' : 'password';
       const remover = c.origem === 'painel'
         ? `<button class="dc-btn danger" type="button" onclick="DCIntegrationEditor.removeCredential('${id}','${c.chave}',this)">Remover do cofre</button>`
         : '';
+      if (compacta) {
+        return `<details class="dc-rd-credential">
+          <summary>
+            <span><b>${esc(c.label)}${c.obrigatorio ? '' : ' <em>opcional</em>'}</b><small>${estadoCredencial(c)}${c.atualizadoEm ? ` · ${DC.relTime(c.atualizadoEm)}` : ''}</small></span>
+            <span>Editar</span>
+          </summary>
+          <div class="dc-rd-credential-body">
+            <input class="dc-input" id="${inputId}" type="${type}" autocomplete="off" spellcheck="false" placeholder="${c.origem === 'nao_configurado' ? 'Cadastrar valor' : 'Digite somente para substituir'}"/>
+            <div class="dc-toolbar">
+              <button class="dc-btn primary" type="button" onclick="DCIntegrationEditor.saveCredential('${id}','${c.chave}',this)">Salvar</button>
+              ${remover}
+            </div>
+          </div>
+        </details>`;
+      }
       return `<div class="dc-ip-credential">
         <div class="dc-ip-credential-head"><div><strong>${esc(c.label)}</strong>${c.obrigatorio ? '' : ' <span class="dc-muted">(opcional)</span>'}<div style="margin-top:3px">${estadoCredencial(c)}${c.atualizadoEm ? ` <span class="dc-muted">· ${DC.relTime(c.atualizadoEm)}</span>` : ''}</div></div></div>
         <div class="dc-toolbar" style="margin-top:7px;align-items:stretch">
@@ -36,27 +63,57 @@
         </div>
         <small class="dc-muted">O valor atual nunca volta ao navegador. Ao salvar, ele é cifrado no cofre do Sra Luck e o campo é limpo.</small>
       </div>`;
-    }).join('');
+    };
 
-    const status = (I.status?.integracoes || []).find((x) => x.id === id) || {};
-    const obrigatoriasOk = (p.campos || []).filter((x) => x.obrigatorio).every((x) => x.origem !== 'nao_configurado');
-    const rdOAuthOk = id !== 'rd_station' || (
-      (p.campos || []).find((x) => x.chave === 'access_token')?.origem !== 'nao_configurado' &&
-      (p.campos || []).find((x) => x.chave === 'refresh_token')?.origem !== 'nao_configurado'
-    );
-    const baseOk = id !== 'rd_station' || !['base_incompleta'].includes(status.estadoValidacao || status.estado);
-    const bloqueada = p.ativo !== true && (!obrigatoriasOk || !rdOAuthOk || !baseOk);
-    const rdGate = id === 'rd_station' ? `<div class="dc-ip-list" style="margin-top:8px">
-      <div class="dc-ip-row"><b>Credenciais obrigatórias</b><span>Client ID, Client Secret, Redirect URI e segredo do webhook</span>${DC.chip(obrigatoriasOk ? 'OK' : 'Pendente', obrigatoriasOk ? 'ok' : 'warn')}</div>
-      <div class="dc-ip-row"><b>OAuth autorizado</b><span>Access Token e Refresh Token presentes no cofre após a autorização</span>${DC.chip(rdOAuthOk ? 'OK' : 'Pendente', rdOAuthOk ? 'ok' : 'warn')}</div>
-      <div class="dc-ip-row"><b>Persistência</b><span>Estrutura real do backend disponível</span>${DC.chip(baseOk ? 'OK' : 'Pendente', baseOk ? 'ok' : 'warn')}</div>
-      <div class="dc-ip-row"><b>Validação real</b><span>Ao ativar, o backend testa a autenticação no RD. Falha mantém a integração desligada.</span>${DC.chip(status.conexaoLiveVerificada ? 'Validada' : 'Obrigatória', status.conexaoLiveVerificada ? 'ok' : 'warn')}</div>
-    </div>` : '';
+    if (id === 'rd_station') {
+      const obrigatorias = (p.campos || []).filter((c) => c.obrigatorio);
+      const oauthCampos = (p.campos || []).filter((c) => !c.obrigatorio);
+      const configuradas = (p.campos || []).filter((c) => c.origem !== 'nao_configurado').length;
+      const validacaoTexto = ultimoTeste
+        ? `Último teste ${testeAprovado ? 'aprovado' : 'reprovado'} · ${DC.relTime(ultimoTeste.created_at)}`
+        : 'Nenhum teste real registrado';
+      return `<div class="dc-rd-overview-stack">
+        <section class="dc-rd-overview-state">
+          <div>
+            <small>Estado da integração</small>
+            <strong>${p.ativo === true ? 'Ativa' : bloqueada ? 'Bloqueada por pré-requisito' : 'Desativada'}</strong>
+            <span>${p.ativo === true ? 'Automação liberada. Alterar uma credencial desativa a integração até nova validação.' : bloqueada ? 'Complete os pré-requisitos antes de ativar.' : 'Ao ativar, o backend repete a validação real no RD Station.'}</span>
+          </div>
+          <label class="dc-switch" title="${p.ativo === true ? 'Desativar integração' : bloqueada ? 'Complete os pré-requisitos antes de ativar' : 'Validar no provedor e ativar'}"><input type="checkbox" ${p.ativo === true ? 'checked' : ''} ${bloqueada ? 'disabled' : ''} onchange="DCIntegrationEditor.toggleProvider('${id}',this.checked,this)"/><span></span></label>
+        </section>
 
+        <details class="dc-rd-overview-details">
+          <summary><span><b>Pré-requisitos</b><small>OAuth, persistência e validação real</small></span><span>${[obrigatoriasOk,rdOAuthOk,baseOk,testeAprovado].filter(Boolean).length}/4 OK</span></summary>
+          <div class="dc-rd-prereq-grid">
+            <div><span>Credenciais obrigatórias</span>${DC.chip(obrigatoriasOk ? 'OK' : 'Pendente', obrigatoriasOk ? 'ok' : 'warn')}</div>
+            <div><span>OAuth autorizado</span>${DC.chip(rdOAuthOk ? 'OK' : 'Pendente', rdOAuthOk ? 'ok' : 'warn')}</div>
+            <div><span>Persistência</span>${DC.chip(baseOk ? 'OK' : 'Pendente', baseOk ? 'ok' : 'warn')}</div>
+            <div><span>Teste real</span>${DC.chip(testeAprovado ? 'Aprovado' : 'Pendente', testeAprovado ? 'ok' : 'warn')}<small>${esc(validacaoTexto)}</small></div>
+          </div>
+        </details>
+
+        <details class="dc-rd-overview-details dc-rd-vault">
+          <summary><span><b>Credenciais e OAuth</b><small>${configuradas} de ${(p.campos || []).length} valores configurados no cofre</small></span><span>Gerenciar</span></summary>
+          <div class="dc-rd-vault-body">
+            <div class="dc-note"><b>Cofre cifrado.</b> Os valores atuais nunca voltam ao navegador. Digite um valor somente para substituir o existente.</div>
+            <div class="dc-rd-cred-group">
+              <div class="dc-rd-group-label"><span>Obrigatórias</span><small>Conexão e webhook</small></div>
+              <div class="dc-rd-credential-grid">${obrigatorias.map((c) => credencialHtml(c, true)).join('')}</div>
+            </div>
+            ${oauthCampos.length ? `<div class="dc-rd-cred-group">
+              <div class="dc-rd-group-label"><span>Autorização OAuth</span><small>Tokens e validade</small></div>
+              <div class="dc-rd-credential-grid">${oauthCampos.map((c) => credencialHtml(c, true)).join('')}</div>
+            </div>` : ''}
+            <p class="dc-ov-p dc-muted">Salvar ou remover qualquer credencial invalida a ativação anterior até uma nova validação real.</p>
+          </div>
+        </details>
+      </div>`;
+    }
+
+    const campos = (p.campos || []).map((c) => credencialHtml(c)).join('');
     return `<div class="dc-note"><b>Credenciais gerenciadas pelo Dev.</b> Valores existentes aparecem somente mascarados. Salvar ou remover qualquer credencial invalida a ativação anterior; o status só volta a Conectada depois de uma validação real.</div>
-      ${rdGate}
       <div class="dc-row" style="grid-template-columns:1fr auto;margin-top:8px">
-        <div><strong>${p.ativo === true ? 'Integração ativa e validada' : bloqueada ? 'Integração bloqueada por pré-requisito' : 'Integração desativada / requer validação'}</strong><div class="dc-muted">${p.ativo === true ? 'O backend já aprovou a ativação desta configuração.' : bloqueada ? 'Complete os itens pendentes acima antes de ativar.' : 'Ativar executa uma chamada real ao provedor. Se a autenticação falhar, permanece desligada.'}</div></div>
+        <div><strong>${p.ativo === true ? 'Integração ativa e validada' : bloqueada ? 'Integração bloqueada por pré-requisito' : 'Integração desativada / requer validação'}</strong><div class="dc-muted">${p.ativo === true ? 'O backend já aprovou a ativação desta configuração.' : bloqueada ? 'Complete os itens pendentes antes de ativar.' : 'Ativar executa uma chamada real ao provedor. Se a autenticação falhar, permanece desligada.'}</div></div>
         <label class="dc-switch" title="${p.ativo === true ? 'Desativar integração' : bloqueada ? 'Complete os pré-requisitos antes de ativar' : 'Validar no provedor e ativar'}"><input type="checkbox" ${p.ativo === true ? 'checked' : ''} ${bloqueada ? 'disabled' : ''} onchange="DCIntegrationEditor.toggleProvider('${id}',this.checked,this)"/><span></span></label>
       </div>
       <div class="dc-ip-credentials" style="margin-top:8px">${campos || '<div class="dc-empty">Sem campos de credencial.</div>'}</div>`;
@@ -198,8 +255,26 @@
       if (id === 'gemini') return openGeminiDrawer();
       return;
     }
-    const ev = I.history.filter((h) => h.entidade_id === id || h.detalhes?.provedor === id).slice(0,15).map(historyRow).join('') || '<div class="dc-empty">Sem eventos registrados.</div>';
-    const topo = `<div class="dc-int-top" style="margin-bottom:10px">${logo(x.id,x.nome)}<div><strong>${esc(x.nome)}</strong><small>${esc(GROUPS[x.grupo] || x.grupo)}</small></div>${DC.chip(...(STATE[stateOf(x)] || [stateOf(x),'neutral']))}</div><div class="dc-note">${esc(x.detalhes || '')}</div><div class="dc-ip-kpis" style="margin-top:8px"><div><small>Ativação</small><b>${x.ativo ? 'Ativa' : 'Desativada'}</b></div><div><small>Último teste</small><b>${x.ultimaVerificacao ? DC.relTime(x.ultimaVerificacao) : 'nunca'}</b></div><div><small>Latência</small><b>${x.latenciaMs != null ? x.latenciaMs + ' ms' : '—'}</b></div><div><small>Código</small><b>${esc(x.codigoValidacao || '—')}</b></div></div>`;
+    const historico = I.history.filter((h) => h.entidade_id === id || h.detalhes?.provedor === id);
+    const ultimoTeste = historico.find((h) => h.acao === 'testou_conexao_integracao') || null;
+    const testeAprovado = ultimoTeste?.detalhes?.conectado === true;
+    const ultimaVerificacao = ultimoTeste?.created_at || x.ultimaVerificacao || null;
+    const latencia = ultimoTeste?.detalhes?.latenciaMs ?? x.latenciaMs ?? null;
+    const codigo = ultimoTeste?.detalhes?.codigo || x.codigoValidacao || null;
+    const ev = historico.slice(0,15).map(historyRow).join('') || '<div class="dc-empty">Sem eventos registrados.</div>';
+    const topo = id === 'rd_station'
+      ? `<section class="dc-rd-overview-hero">
+          <div class="dc-rd-overview-brand">${logo(x.id,x.nome)}<div><strong>${esc(x.nome)}</strong><small>${esc(GROUPS[x.grupo] || x.grupo)} · somente leitura</small></div></div>
+          <div class="dc-rd-overview-badges">${DC.chip(x.ativo ? 'Ativa' : 'Desativada', x.ativo ? 'ok' : 'neutral')}${DC.chip(testeAprovado ? 'Teste aprovado' : 'Teste pendente', testeAprovado ? 'ok' : 'warn')}</div>
+          <p>${esc(x.detalhes || '')}</p>
+          <div class="dc-rd-overview-kpis">
+            <div><small>Ativação</small><b>${x.ativo ? 'Ativa' : 'Desativada'}</b></div>
+            <div><small>Último teste real</small><b>${ultimaVerificacao ? DC.relTime(ultimaVerificacao) : 'nunca'}</b></div>
+            <div><small>Latência</small><b>${latencia != null ? esc(latencia + ' ms') : '—'}</b></div>
+            <div><small>Resultado</small><b>${testeAprovado ? 'Aprovado' : codigo ? esc(codigo) : '—'}</b></div>
+          </div>
+        </section>`
+      : `<div class="dc-int-top" style="margin-bottom:10px">${logo(x.id,x.nome)}<div><strong>${esc(x.nome)}</strong><small>${esc(GROUPS[x.grupo] || x.grupo)}</small></div>${DC.chip(...(STATE[stateOf(x)] || [stateOf(x),'neutral']))}</div><div class="dc-note">${esc(x.detalhes || '')}</div><div class="dc-ip-kpis" style="margin-top:8px"><div><small>Ativação</small><b>${x.ativo ? 'Ativa' : 'Desativada'}</b></div><div><small>Último teste</small><b>${ultimaVerificacao ? DC.relTime(ultimaVerificacao) : 'nunca'}</b></div><div><small>Latência</small><b>${latencia != null ? latencia + ' ms' : '—'}</b></div><div><small>Código</small><b>${esc(codigo || '—')}</b></div></div>`;
     const extras = id === 'web_push' && I.vapid
       ? `${DC.field('VAPID configurado', I.vapid.configurado ? 'Sim' : 'Não')}${DC.field('Validado', I.vapid.validado ? 'Sim' : 'Não')}${DC.field('Aparelhos inscritos', I.vapid.assinaturas ?? '—')}`
       : '';

@@ -393,9 +393,12 @@
     if (!i) return false;
     const disp = i.funcoes.filter((f) => f.situacao === 'disponivel').length;
     const extras = EXTRAS[id] || [];
+    const resumoFuncoes = `${disp} de ${i.funcoes.length} funções disponíveis · ${i.funcoes.filter((f) => f.situacao === 'api_permite').length} que a API permite e ainda não foram feitas · ${i.funcoes.filter((f) => f.situacao === 'api_nao_permite').length} que a API não permite.`;
+    const visaoHtml = id === 'rd_station'
+      ? `${partes.topo}${partes.extras || ''}${partes.credenciais}<details class="dc-rd-overview-details dc-rd-tech-summary"><summary><span><b>Resumo técnico</b><small>Capacidades disponíveis nesta integração</small></span><span>${disp}/${i.funcoes.length} funções</span></summary><p class="dc-ov-p">${resumoFuncoes}</p></details>`
+      : `${partes.topo}${partes.extras || ''}<h3 class="dc-nc-h">Credenciais</h3>${partes.credenciais}<div class="dc-note" style="margin-top:6px">Segredos ficam no cofre cifrado do Sra Luck. O Dev Console grava novos valores, mas nunca recebe o segredo atual em texto puro.</div><h3 class="dc-nc-h">Resumo</h3><p class="dc-ov-p">${resumoFuncoes}</p>`;
     const abas = [
-      ['visao', 'Visão', `${partes.topo}${partes.extras || ''}<h3 class="dc-nc-h">Credenciais</h3>${partes.credenciais}<div class="dc-note" style="margin-top:6px">Segredos ficam no cofre cifrado do Sra Luck. O Dev Console grava novos valores, mas nunca recebe o segredo atual em texto puro.</div>
-        <h3 class="dc-nc-h">Resumo</h3><p class="dc-ov-p">${disp} de ${i.funcoes.length} funções disponíveis · ${i.funcoes.filter((f) => f.situacao === 'api_permite').length} que a API permite e ainda não foram feitas · ${i.funcoes.filter((f) => f.situacao === 'api_nao_permite').length} que a API não permite.</p>`],
+      ['visao', 'Visão', visaoHtml],
       ['funcoes', `Funções (${i.funcoes.length})`, abaFuncoes(i)],
       ...extras.map(([k, l]) => [k, l, `<div data-extra="${k}"><div class="dc-muted">Carregando…</div></div>`]),
       ['dados', 'Dados e mapeamento', abaDados(i)],
