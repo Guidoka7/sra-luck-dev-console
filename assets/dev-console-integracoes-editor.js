@@ -136,6 +136,18 @@
     DC.toast('Autorização aberta em nova aba. Depois de concluir, volte aqui e use Validar e ativar.');
   }
 
+  async function configureRdWebhooks(btn) {
+    const r = await DC.action(btn, () => DC.api('/api/admin/integrations/rd-station/webhooks/configurar', {
+      method: 'POST', body: {}, timeout: 30000
+    }));
+    if (!r?.ok) return;
+    const eventos = Array.isArray(r.data?.eventos) ? r.data.eventos : [];
+    const criados = eventos.filter((x) => x.acao === 'criado').length;
+    const atualizados = eventos.filter((x) => x.acao === 'atualizado').length;
+    DC.toast(`Webhooks do RD configurados. ${criados} criado(s), ${atualizados} atualizado(s).`);
+    await refreshAndReopen('rd_station');
+  }
+
   async function vapidAction(payload, btn, success) {
     const r = await DC.action(btn, () => DC.api('/api/admin/integrations/web-push/vapid', {
       method: 'POST', body: payload, timeout: 30000
@@ -193,7 +205,7 @@
       : '';
     const footer = [
       id === 'gemini' ? '<button class="dc-btn" onclick="openGeminiDrawer()">Mensagem diária</button>' : '',
-      id === 'rd_station' ? '<button class="dc-btn" onclick="DCIntegrationEditor.oauthProvider(\'rd_station\',this)">Autorizar RD Station</button>' : '',
+      id === 'rd_station' ? '<button class="dc-btn" onclick="DCIntegrationEditor.configureRdWebhooks(this)">Configurar webhooks</button><button class="dc-btn" onclick="DCIntegrationEditor.oauthProvider(\'rd_station\',this)">Autorizar RD Station</button>' : '',
       id === 'conta_azul' ? '<button class="dc-btn" onclick="DCIntegrationEditor.oauthProvider(\'conta_azul\',this)">Autorizar Conta Azul</button>' : '',
       canTest(id) ? `<button class="dc-btn primary" onclick="testProvider('${id}',this)">Testar conexão real</button>` : ''
     ].join('');
@@ -207,7 +219,7 @@
     return oldTest(id, btn);
   }
 
-  window.DCIntegrationEditor = { saveCredential, removeCredential, toggleProvider, oauthProvider, generateVapid, importVapid, testVapid };
+  window.DCIntegrationEditor = { saveCredential, removeCredential, toggleProvider, oauthProvider, configureRdWebhooks, generateVapid, importVapid, testVapid };
   window.openProvider = enhancedOpenProvider;
   window.testProvider = enhancedTestProvider;
 })();
