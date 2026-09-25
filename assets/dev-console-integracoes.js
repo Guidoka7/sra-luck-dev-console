@@ -333,8 +333,6 @@
     const configurada = (chave) => campos.find((x) => x.chave === chave)?.origem !== 'nao_configurado';
     const oauth = configurada('access_token') && configurada('refresh_token');
     const basePronta = Boolean(imps.ok && imps.data?.disponivel !== false && status.estado !== 'base_incompleta' && status.estadoValidacao !== 'base_incompleta');
-    const validada = status.conexaoLiveVerificada === true;
-    const ativa = status.ativo === true && validada && basePronta;
     const lista = imps.ok ? (imps.data?.importacoes || []) : [];
     const concluidas = lista.filter((x) => x.status === 'concluida').length;
     const falhas = lista.filter((x) => x.status === 'erro').length;
@@ -346,20 +344,27 @@
       return acc;
     }, { lidas: 0, criadas: 0, duplicadas: 0 });
     const ultima = lista[0] || null;
-    const eventos = (hist.ok ? (hist.data?.eventos || []) : [])
-      .filter((e) => e.entidade_id === 'rd_station' || e.detalhes?.provedor === 'rd_station')
-      .slice(0, 30);
+    const eventosRd = (hist.ok ? (hist.data?.eventos || []) : [])
+      .filter((e) => e.entidade_id === 'rd_station' || e.detalhes?.provedor === 'rd_station');
+    const ultimoTeste = eventosRd.find((e) => e.acao === 'testou_conexao_integracao') || null;
+    const testeRealAprovado = ultimoTeste?.detalhes?.conectado === true;
+    const ativa = status.ativo === true && testeRealAprovado && basePronta;
+    const eventos = eventosRd.slice(0, 30);
     const gate = [
       ['Credenciais OAuth', (cred.campos || []).filter((x) => x.obrigatorio).every((x) => x.origem !== 'nao_configurado'), 'Client ID, Client Secret, Redirect URI e segredo do webhook'],
       ['Conta autorizada', oauth, 'Access Token e Refresh Token presentes no cofre'],
       ['Persistência', basePronta, 'estrutura de importações disponível no backend'],
-      ['Teste real', validada, 'último teste autenticado aprovado'],
+      ['Teste real', testeRealAprovado, ultimoTeste ? `último teste autenticado ${testeRealAprovado ? 'aprovado' : 'reprovado'} · ${quando(ultimoTeste.created_at)}` : 'nenhum teste autenticado registrado'],
     ];
     alvo.innerHTML = `
       <div class="dc-note"><b>RD Station CRM v2.</b> O Dev Console usa somente capacidades que o backend do Sra Luck já implementa. A API do RD possui operações de escrita, mas o projeto mantém o RD em <b>somente leitura</b>; por isso nenhuma ação de criar/alterar negócio ou contato é exposta aqui.</div>
       <h3 class="dc-nc-h">Pré-requisitos de ativação</h3>
       <div class="dc-ip-list">${gate.map(([nome, ok, detalhe]) => `<div class="dc-ip-row"><b>${esc(nome)}</b><span>${esc(detalhe)}</span>${DC.chip(ok ? 'OK' : 'Pendente', ok ? 'ok' : 'warn')}</div>`).join('')}</div>
-      ${ativa ? '' : '<div class="dc-warn-box" style="margin-top:8px">A automação permanece bloqueada enquanto houver pré-requisito pendente. O botão de ativação executa uma validação real no provedor; falha de autenticação mantém a integração desligada.</div>'}
+      ${status.ativo === true
+        ? '<div class="dc-note" style="margin-top:8px"><b>Integração ativa.</b> O RD Station está liberado para a automação configurada.</div>'
+        : testeRealAprovado && basePronta && oauth
+          ? '<div class="dc-note" style="margin-top:8px"><b>Teste real aprovado.</b> A integração continua desativada até você ativá-la. Ao ativar, o sistema executa uma nova validação real antes de liberar a automação.</div>'
+          : '<div class="dc-warn-box" style="margin-top:8px">A integração permanece desativada enquanto houver pré-requisito pendente. Ao ativar, o sistema executa uma validação real; falha de autenticação mantém a integração desligada.</div>'}
       <h3 class="dc-nc-h">Monitoramento operacional</h3>
       <div class="dc-ip-kpis">
         <div><small>Última sincronização</small><b>${ultima?.iniciado_em ? esc(quando(ultima.iniciado_em)) : 'nunca'}</b></div>
