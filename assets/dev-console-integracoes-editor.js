@@ -38,10 +38,26 @@
       </div>`;
     }).join('');
 
+    const status = (I.status?.integracoes || []).find((x) => x.id === id) || {};
+    const obrigatoriasOk = (p.campos || []).filter((x) => x.obrigatorio).every((x) => x.origem !== 'nao_configurado');
+    const rdOAuthOk = id !== 'rd_station' || (
+      (p.campos || []).find((x) => x.chave === 'access_token')?.origem !== 'nao_configurado' &&
+      (p.campos || []).find((x) => x.chave === 'refresh_token')?.origem !== 'nao_configurado'
+    );
+    const baseOk = id !== 'rd_station' || !['base_incompleta'].includes(status.estadoValidacao || status.estado);
+    const bloqueada = p.ativo !== true && (!obrigatoriasOk || !rdOAuthOk || !baseOk);
+    const rdGate = id === 'rd_station' ? `<div class="dc-ip-list" style="margin-top:8px">
+      <div class="dc-ip-row"><b>Credenciais obrigatórias</b><span>Client ID, Client Secret, Redirect URI e segredo do webhook</span>${DC.chip(obrigatoriasOk ? 'OK' : 'Pendente', obrigatoriasOk ? 'ok' : 'warn')}</div>
+      <div class="dc-ip-row"><b>OAuth autorizado</b><span>Access Token e Refresh Token presentes no cofre após a autorização</span>${DC.chip(rdOAuthOk ? 'OK' : 'Pendente', rdOAuthOk ? 'ok' : 'warn')}</div>
+      <div class="dc-ip-row"><b>Persistência</b><span>Estrutura real do backend disponível</span>${DC.chip(baseOk ? 'OK' : 'Pendente', baseOk ? 'ok' : 'warn')}</div>
+      <div class="dc-ip-row"><b>Validação real</b><span>Ao ativar, o backend testa a autenticação no RD. Falha mantém a integração desligada.</span>${DC.chip(status.conexaoLiveVerificada ? 'Validada' : 'Obrigatória', status.conexaoLiveVerificada ? 'ok' : 'warn')}</div>
+    </div>` : '';
+
     return `<div class="dc-note"><b>Credenciais gerenciadas pelo Dev.</b> Valores existentes aparecem somente mascarados. Salvar ou remover qualquer credencial invalida a ativação anterior; o status só volta a Conectada depois de uma validação real.</div>
+      ${rdGate}
       <div class="dc-row" style="grid-template-columns:1fr auto;margin-top:8px">
-        <div><strong>${p.ativo === true ? 'Integração ativa e validada' : 'Integração desativada / requer validação'}</strong><div class="dc-muted">${p.ativo === true ? 'O backend já aprovou a ativação desta configuração.' : 'Ativar executa uma chamada real ao provedor. Se a autenticação falhar, permanece desligada.'}</div></div>
-        <label class="dc-switch" title="${p.ativo === true ? 'Desativar integração' : 'Validar no provedor e ativar'}"><input type="checkbox" ${p.ativo === true ? 'checked' : ''} onchange="DCIntegrationEditor.toggleProvider('${id}',this.checked,this)"/><span></span></label>
+        <div><strong>${p.ativo === true ? 'Integração ativa e validada' : bloqueada ? 'Integração bloqueada por pré-requisito' : 'Integração desativada / requer validação'}</strong><div class="dc-muted">${p.ativo === true ? 'O backend já aprovou a ativação desta configuração.' : bloqueada ? 'Complete os itens pendentes acima antes de ativar.' : 'Ativar executa uma chamada real ao provedor. Se a autenticação falhar, permanece desligada.'}</div></div>
+        <label class="dc-switch" title="${p.ativo === true ? 'Desativar integração' : bloqueada ? 'Complete os pré-requisitos antes de ativar' : 'Validar no provedor e ativar'}"><input type="checkbox" ${p.ativo === true ? 'checked' : ''} ${bloqueada ? 'disabled' : ''} onchange="DCIntegrationEditor.toggleProvider('${id}',this.checked,this)"/><span></span></label>
       </div>
       <div class="dc-ip-credentials" style="margin-top:8px">${campos || '<div class="dc-empty">Sem campos de credencial.</div>'}</div>`;
   }
