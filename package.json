@@ -4,7 +4,6 @@
   "private": true,
   "description": "Sra. Luck Dev Console — central técnica de incidentes, manutenção e observabilidade",
   "scripts": {
-    "dev": "npx vercel dev",
     "check": "node scripts/validate.mjs && node scripts/security-check.mjs",
     "validate": "node scripts/validate.mjs",
     "security": "node scripts/security-check.mjs"
