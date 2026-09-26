@@ -65,24 +65,25 @@ function clearCookie(res, name, req) {
   setCookie(res, name, '', { maxAge: 0, secure: isHttps(req), httpOnly: true, sameSite: 'Lax' });
 }
 
+function isLocalHost(host) {
+  return host === 'localhost' || host.startsWith('localhost:') || host === '127.0.0.1' || host.startsWith('127.0.0.1:');
+}
+
+function isCodespacesHost(host) {
+  return host.endsWith('.app.github.dev');
+}
+
 function codespacesOriginAllowed(req, origin) {
   try {
     const url = new URL(origin);
-    if (url.protocol !== 'https:' || !url.hostname.toLowerCase().endsWith('.app.github.dev')) return false;
+    if (url.protocol !== 'https:' || !isCodespacesHost(url.hostname.toLowerCase())) return false;
 
-    // Esta exceção existe somente para o preview local servido por `vercel dev` dentro
-    // do Codespaces. Em deployments da Vercel (preview/production), o same-origin
-    // continua estrito e uma origem *.app.github.dev é rejeitada.
-    const vercelEnv = String(process.env.VERCEL_ENV || '').trim().toLowerCase();
-    if (vercelEnv && vercelEnv !== 'development') return false;
-
+    // No Codespaces o TLS e a URL publica ficam no proxy *.app.github.dev,
+    // enquanto `vercel dev` pode entregar a Function como localhost. O request
+    // precisa chegar por localhost ou pelo proprio dominio publico do Codespaces.
     const host = String(req.headers.host || '').split(',')[0].trim().toLowerCase();
     const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim().toLowerCase();
-    const localHost = host === 'localhost' || host.startsWith('localhost:') || host === '127.0.0.1' || host.startsWith('127.0.0.1:');
-    const localForwardedHost = forwardedHost === 'localhost' || forwardedHost.startsWith('localhost:') || forwardedHost === '127.0.0.1' || forwardedHost.startsWith('127.0.0.1:');
-    const publicCodespacesHost = host.endsWith('.app.github.dev') || forwardedHost.endsWith('.app.github.dev');
-
-    return localHost || localForwardedHost || publicCodespacesHost;
+    return isLocalHost(host) || isLocalHost(forwardedHost) || isCodespacesHost(host) || isCodespacesHost(forwardedHost);
   } catch {
     return false;
   }
@@ -94,9 +95,6 @@ function sameOrigin(req) {
   const proto = isHttps(req) ? 'https' : 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   if (origin === `${proto}://${host}`) return true;
-  // GitHub Codespaces termina TLS fora do `vercel dev`: o navegador usa
-  // https://<codespace>-<porta>.app.github.dev enquanto a Function pode enxergar
-  // localhost internamente. A exceção abaixo é limitada ao ambiente development.
   return codespacesOriginAllowed(req, origin);
 }
 
