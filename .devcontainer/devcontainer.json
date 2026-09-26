@@ -1,0 +1,4 @@
+{
+  "name": "Sra Luck Dev Console",
+  "postStartCommand": "bash scripts/codespaces-auto-sync.sh"
+}
