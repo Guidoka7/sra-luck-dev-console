@@ -65,12 +65,33 @@ function clearCookie(res, name, req) {
   setCookie(res, name, '', { maxAge: 0, secure: isHttps(req), httpOnly: true, sameSite: 'Lax' });
 }
 
+function codespacesOriginAllowed(origin) {
+  const codespace = String(process.env.CODESPACE_NAME || '').trim().toLowerCase();
+  const inCodespaces = String(process.env.CODESPACES || '').toLowerCase() === 'true' || Boolean(codespace);
+  if (!inCodespaces || !codespace) return false;
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== 'https:') return false;
+    const forwardingDomain = String(process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN || 'app.github.dev')
+      .trim()
+      .toLowerCase()
+      .replace(/^\.+/, '');
+    return url.hostname.toLowerCase().startsWith(`${codespace}-`) && url.hostname.toLowerCase().endsWith(`.${forwardingDomain}`);
+  } catch {
+    return false;
+  }
+}
+
 function sameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
   const proto = isHttps(req) ? 'https' : 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host;
-  return origin === `${proto}://${host}`;
+  if (origin === `${proto}://${host}`) return true;
+  // GitHub Codespaces termina TLS fora do `vercel dev`, então o Origin público
+  // pode ser *.app.github.dev enquanto a Function enxerga localhost internamente.
+  // A exceção é aceita somente no Codespace atual; produção continua same-origin estrito.
+  return codespacesOriginAllowed(origin);
 }
 
 function requestId(req) {
