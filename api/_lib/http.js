@@ -65,25 +65,10 @@ function clearCookie(res, name, req) {
   setCookie(res, name, '', { maxAge: 0, secure: isHttps(req), httpOnly: true, sameSite: 'Lax' });
 }
 
-function isLocalHost(host) {
-  return host === 'localhost' || host.startsWith('localhost:') || host === '127.0.0.1' || host.startsWith('127.0.0.1:');
-}
-
-function isCodespacesHost(host) {
-  return host.endsWith('.app.github.dev');
-}
-
-function codespacesOriginAllowed(req, origin) {
+function isCodespacesOrigin(origin) {
   try {
     const url = new URL(origin);
-    if (url.protocol !== 'https:' || !isCodespacesHost(url.hostname.toLowerCase())) return false;
-
-    // No Codespaces o TLS e a URL publica ficam no proxy *.app.github.dev,
-    // enquanto `vercel dev` pode entregar a Function como localhost. O request
-    // precisa chegar por localhost ou pelo proprio dominio publico do Codespaces.
-    const host = String(req.headers.host || '').split(',')[0].trim().toLowerCase();
-    const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim().toLowerCase();
-    return isLocalHost(host) || isLocalHost(forwardedHost) || isCodespacesHost(host) || isCodespacesHost(forwardedHost);
+    return url.protocol === 'https:' && url.hostname.toLowerCase().endsWith('.app.github.dev');
   } catch {
     return false;
   }
@@ -92,10 +77,16 @@ function codespacesOriginAllowed(req, origin) {
 function sameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
+
+  // Esta branch é usada como preview no GitHub Codespaces. O proxy do Codespaces
+  // pode reescrever Host/x-forwarded-host de formas diferentes entre portas e
+  // execuções do `vercel dev`, então a única exceção necessária aqui é a origem
+  // HTTPS oficial do próprio Codespaces. A main/produção não recebe esta alteração.
+  if (isCodespacesOrigin(origin)) return true;
+
   const proto = isHttps(req) ? 'https' : 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host;
-  if (origin === `${proto}://${host}`) return true;
-  return codespacesOriginAllowed(req, origin);
+  return origin === `${proto}://${host}`;
 }
 
 function requestId(req) {
