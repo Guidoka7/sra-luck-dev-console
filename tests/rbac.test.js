@@ -38,3 +38,13 @@ test('proxy: escritas mapeadas continuam exigindo a permissão do domínio', () 
   assert.equal(hasPermission(viewer, 'finance.correct'), false);
   assert.equal(hasPermission(operator, 'finance.correct'), true);
 });
+
+test('cofre de credenciais: só owner e developer alteram (connectors.manage)', () => {
+  const developer = { role: 'developer', permissions: [] };
+  assert.equal(hasPermission(owner, 'connectors.manage'), true);
+  assert.equal(hasPermission(developer, 'connectors.manage'), true);
+  assert.equal(hasPermission(operator, 'connectors.manage'), false);
+  assert.equal(hasPermission(viewer, 'connectors.manage'), false);
+  // todos continuam vendo o estado mascarado do cofre
+  for (const actor of [owner, developer, operator, viewer]) assert.equal(hasPermission(actor, 'integrations.view'), true);
+});

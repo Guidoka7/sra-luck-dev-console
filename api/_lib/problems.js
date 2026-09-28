@@ -344,7 +344,8 @@ async function detect(actor) {
   await anexarHistorico(problemas);
   problemas.sort((a, b) => (SEVERITY_RANK[a.severidade] - SEVERITY_RANK[b.severidade]) || (b.ocorrencias - a.ocorrencias));
   const count = (s) => problemas.filter(p => p.severidade === s).length;
-  const configurado = Boolean(sraConfig().token);
+  const conexao = await sraConnection();
+  const configurado = Boolean(conexao.configured && conexao.tokenConfigured);
   return {
     ok: true, geradoEm: new Date().toISOString(), configurado,
     funcoes: { total: fontes.length, ok: fontes.filter(f => f.ok).length, falhando: fontes.filter(f => !f.ok && !f.naoConfigurado).length, naoConfiguradas: fontes.filter(f => f.naoConfigurado).length },

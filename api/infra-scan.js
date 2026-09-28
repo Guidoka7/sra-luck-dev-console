@@ -189,12 +189,14 @@ module.exports=async function handler(req,res){
  if(mode==='connections-secrets'){
   if(req.method==='GET'){
    const actor=await requireSession(req,res,'integrations.view');if(!actor)return;
-   try{return json(res,200,{ok:true,groups:await catalogStatus(),bootstrap:{DEV_SUPABASE_URL:Boolean(process.env.DEV_SUPABASE_URL),DEV_SUPABASE_SERVICE_ROLE_KEY:Boolean(process.env.DEV_SUPABASE_SERVICE_ROLE_KEY),DEV_SESSION_SECRET:Boolean(process.env.DEV_SESSION_SECRET)}})}
+   try{return json(res,200,{ok:true,podeGerenciar:hasPermission(actor,'connectors.manage'),groups:await catalogStatus(),bootstrap:{DEV_SUPABASE_URL:Boolean(process.env.DEV_SUPABASE_URL),DEV_SUPABASE_SERVICE_ROLE_KEY:Boolean(process.env.DEV_SUPABASE_SERVICE_ROLE_KEY),DEV_SESSION_SECRET:Boolean(process.env.DEV_SESSION_SECRET)}})}
    catch(e){return json(res,503,{erro:'Cofre técnico indisponível.',codigo:'DEV_VAULT_UNAVAILABLE',detalhe:e?.message||null})}
   }
   if(req.method==='POST'){
    if(!sameOrigin(req))return json(res,403,{erro:'Origem da requisição não autorizada.',codigo:'ORIGIN_DENIED'});
-   const actor=await requireSession(req,res,'integrations.manage');if(!actor)return;
+   // Credenciais do conector (URL e token M2M do Sra Luck, tokens de infraestrutura):
+   // só owner e developer. O operator opera integrações, mas não troca credenciais.
+   const actor=await requireSession(req,res,'connectors.manage');if(!actor)return;
    let input;try{input=await body(req)}catch(e){return json(res,e.statusCode||400,{erro:'Payload inválido.'})}
    const key=String(input?.key||'').trim(),action=String(input?.action||'save');
    try{
