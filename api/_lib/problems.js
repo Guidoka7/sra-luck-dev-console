@@ -3,6 +3,7 @@ const { rest, audit } = require('./supabase');
 const { hasPermission } = require('./rbac');
 const customApis = require('./custom-apis');
 const { explicar } = require('./explain');
+const { sraConnection, baseProblem } = require('./sra-config');
 
 // Central de Problemas: detecta falhas do Admin, App da cliente, notificações,
 // V46, financeiro e integrações usando somente as APIs oficiais do Sra Luck, e
@@ -21,15 +22,11 @@ const WRITE_BLOCK_CODES = {
   DEV_CONSOLE_ROLE_INSUFFICIENT: 'Seu papel no Dev Console não permite esta correção.',
 };
 
-function sraConfig() {
-  return {
-    base: String(process.env.SRA_LUCK_BASE_URL || 'https://sra-luck-react.vercel.app').replace(/\/$/, ''),
-    token: String(process.env.SRA_LUCK_SERVICE_TOKEN || '').trim(),
-  };
-}
-
 async function sraFetch(path, { method = 'GET', body, actor, requestId, timeoutMs = 15000 } = {}) {
-  const { base, token } = sraConfig();
+  // Mesma configuração do proxy e do Guardian (cofre do Dev → variável de ambiente).
+  const conn = await sraConnection();
+  const { base, token } = conn;
+  if (!base) return { ok: false, status: 0, data: null, notConfigured: true, erro: baseProblem(conn) };
   const publicProbe = path === '/api/health' || path === '/api/ready';
   if (!publicProbe && !token) return { ok: false, status: 0, data: null, notConfigured: true, erro: 'Conector server-to-server com o Sra Luck não configurado.' };
   const headers = { Accept: 'application/json', 'x-request-id': requestId || crypto.randomUUID() };

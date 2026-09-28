@@ -5,9 +5,10 @@
   "description": "Sra. Luck Dev Console — central técnica de incidentes, manutenção e observabilidade",
   "scripts": {
     "dev": "npx vercel dev",
-    "check": "node scripts/validate.mjs && node scripts/security-check.mjs",
+    "check": "node scripts/validate.mjs && node scripts/security-check.mjs && node --test tests/*.test.js",
     "validate": "node scripts/validate.mjs",
-    "security": "node scripts/security-check.mjs"
+    "security": "node scripts/security-check.mjs",
+    "test": "node --test tests/*.test.js"
   },
   "engines": {
     "node": ">=20"

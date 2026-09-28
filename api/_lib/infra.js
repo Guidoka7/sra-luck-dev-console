@@ -1,5 +1,6 @@
 const { rest } = require('./supabase');
 const { getSecret } = require('./secrets');
+const { sraConnection, baseProblem } = require('./sra-config');
 
 function nowIso(){ return new Date().toISOString(); }
 function num(v){ const n=Number(v); return Number.isFinite(n)?n:null; }
@@ -173,9 +174,8 @@ async function fetchSupabaseLogs(hours=1){
 }
 
 async function fetchSraStorage(){
- const [baseRaw,tokenRaw]=await Promise.all([getSecret('SRA_LUCK_BASE_URL'),getSecret('SRA_LUCK_SERVICE_TOKEN')]);
- const base=String(baseRaw||'https://sra-luck-react.vercel.app').replace(/\/$/,'');
- const token=String(tokenRaw||'').trim();
+ const conn=await sraConnection();const {base,token}=conn;
+ if(!base)return {source:'storage',configured:false,ok:false,status:'not_configured',message:baseProblem(conn)};
  if(!token)return {source:'storage',configured:false,ok:false,status:'not_configured',message:'Configure SRA_LUCK_SERVICE_TOKEN para validar o Storage principal.'};
  try{
   const {response,ms}=await timedFetch(base+'/api/admin/monitoramento-storage',{headers:{Accept:'application/json','x-dev-console-token':token,'x-dev-actor-id':'infra-guardian','x-dev-actor-role':'owner'}},12000);

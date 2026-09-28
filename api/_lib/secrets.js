@@ -5,7 +5,7 @@ const CATALOG = {
   sra_luck: {
     name: 'Sra Luck',
     fields: [
-      { key:'SRA_LUCK_BASE_URL', label:'URL do sistema', secret:false, placeholder:'https://sra-luck-react.vercel.app' },
+      { key:'SRA_LUCK_BASE_URL', label:'URL do sistema', secret:false, placeholder:'https://sraluckapp.vercel.app' },
       { key:'SRA_LUCK_SERVICE_TOKEN', label:'Service Token M2M', secret:true },
     ],
   },
@@ -44,8 +44,9 @@ const CATALOG = {
     fields: [
       { key:'DEV_VERCEL_ACCESS_TOKEN', label:'Access Token', secret:true },
       { key:'DEV_VERCEL_PROJECT_ID', label:'Project ID · Dev Console', secret:false },
-      { key:'DEV_VERCEL_TEAM_ID', label:'Team ID', secret:false },
+      { key:'DEV_VERCEL_TEAM_ID', label:'Team ID · Dev Console', secret:false },
       { key:'SRA_VERCEL_PROJECT_ID', label:'Project ID · Sra Luck', secret:false },
+      { key:'SRA_VERCEL_TEAM_ID', label:'Team ID · Sra Luck', secret:false },
     ],
   },
   dev_ai: {

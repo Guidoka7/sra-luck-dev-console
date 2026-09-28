@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { json, rawBody, methodNotAllowed, requestId } = require('./_lib/http');
 const { requireSession } = require('./_lib/rbac');
 const { audit } = require('./_lib/supabase');
-const { getSecret } = require('./_lib/secrets');
+const { sraConnection, baseProblem } = require('./_lib/sra-config');
 
 function permissionFor(path,method){
  const read=method==='GET'||method==='HEAD';
@@ -19,17 +19,19 @@ function permissionFor(path,method){
  if(path.startsWith('/api/admin/visao-geral'))return 'monitoring.view';
  if(path.startsWith('/api/admin/clientes'))return read?'app.inspect':'app.correct';
  if(path.startsWith('/api/admin/home-campanhas'))return read?'app.inspect':'app.correct';
- return read?'monitoring.view':'agents.configure';
+ // Escrita em rota sem mapeamento explícito: só owner (nenhum papel a recebe por padrão).
+ return read?'monitoring.view':'sra.admin.write';
 }
 function safePath(value){
  const p=String(value||'');if(!p.startsWith('/api/'))return null;
  try{const u=new URL(p,'https://local.invalid');if(u.origin!=='https://local.invalid')return null;return u.pathname+u.search}catch{return null}
 }
-module.exports=async function handler(req,res){
+async function handler(req,res){
  if(!['GET','HEAD','POST','PATCH','PUT','DELETE'].includes(req.method))return methodNotAllowed(res,['GET','HEAD','POST','PATCH','PUT','DELETE']);
  const path=safePath(req.query?.path);if(!path)return json(res,400,{erro:'Endpoint de destino inválido.',codigo:'SRA_PROXY_PATH_INVALID'});
  const actor=await requireSession(req,res,permissionFor(path,req.method));if(!actor)return;
- const [baseRaw,tokenRaw]=await Promise.all([getSecret('SRA_LUCK_BASE_URL'),getSecret('SRA_LUCK_SERVICE_TOKEN')]);const base=String(baseRaw||'https://sra-luck-react.vercel.app').replace(/\/$/,'');const token=String(tokenRaw||'');
+ const conn=await sraConnection();const {base,token}=conn;
+ if(!base)return json(res,503,{erro:baseProblem(conn),codigo:'SRA_BASE_URL_NOT_CONFIGURED'});
  const publicProbe=path==='/api/health'||path==='/api/ready';
  if(!publicProbe&&!token)return json(res,503,{erro:'Conector server-to-server com o Sra Luck ainda não está configurado.',codigo:'SRA_CONNECTOR_NOT_CONFIGURED'});
  const rid=requestId(req);res.setHeader('x-request-id',rid);
@@ -42,3 +44,5 @@ module.exports=async function handler(req,res){
  if(!['GET','HEAD'].includes(req.method)){await audit({actor_user_id:actor.id,action:'sra.proxy.mutation',resource:path,details:{method:req.method,status:upstream.status,duration_ms:Date.now()-started,request_id:rid,upstream_request_id:upstreamRid||null}})}
  res.end(buf);
 };
+module.exports=handler;
+module.exports.permissionFor=permissionFor;

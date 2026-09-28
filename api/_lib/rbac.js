@@ -15,9 +15,11 @@ const ROLE_PERMISSIONS = {
     'finance.inspect','finance.correct','app.inspect','app.correct','notifications.view','notifications.manage',
     'integrations.view','integrations.manage','agents.configure','sra.staff.view','audit.view','connectors.view'
   ],
+  // Somente leitura: nenhuma permissão de gestão/escrita (o proxy mapeia
+  // escrita não reconhecida para sra.admin.write, exclusiva do owner).
   viewer: [
     'monitoring.view','infrastructure.view','jobs.view','v46.inspect','finance.inspect','app.inspect','notifications.view',
-    'integrations.view','integrations.manage','notifications.manage','agents.configure','sra.staff.view','code.view','releases.view','audit.view','connectors.view'
+    'integrations.view','sra.staff.view','code.view','releases.view','audit.view','connectors.view'
   ],
 };
 

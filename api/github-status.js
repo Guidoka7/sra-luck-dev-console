@@ -28,10 +28,15 @@ async function github(repo, path, init = {}) {
   if (!r.ok) { const e = new Error(data?.message || `GitHub HTTP ${r.status}`); e.status = r.status; throw e; }
   return data;
 }
-async function vercel(path, init = {}) {
+// Cada projeto pode estar em um time diferente da Vercel (o sraluckapp e o
+// Dev Console estão em times distintos): o teamId vem do projeto consultado.
+async function teamFor(which) {
+  return String((await getSecret(which === 'sra' ? 'SRA_VERCEL_TEAM_ID' : 'DEV_VERCEL_TEAM_ID')) || '').trim();
+}
+async function vercel(path, init = {}, which = 'console') {
   const token = String((await getSecret('DEV_VERCEL_ACCESS_TOKEN')) || '').trim();
   if (!token) { const e = new Error('Configure DEV_VERCEL_ACCESS_TOKEN para ver e operar os deploys.'); e.status = 503; throw e; }
-  const team = String((await getSecret('DEV_VERCEL_TEAM_ID')) || '').trim();
+  const team = await teamFor(which);
   const url = `https://api.vercel.com${path}${team ? `${path.includes('?') ? '&' : '?'}teamId=${encodeURIComponent(team)}` : ''}`;
   const r = await fetch(url, { ...init, headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}) }, cache: 'no-store' });
   const data = await r.json().catch(() => ({}));
@@ -72,12 +77,12 @@ async function repoSummary(repo) {
   return { repo, commits, runs, pulls, main: { commit: commits[0] || null, ci: mainCi } };
 }
 
-async function deployments(projectId) {
+async function deployments(projectId, which) {
   if (!projectId) return { configured: false, deployments: [] };
-  const data = await vercel(`/v6/deployments?projectId=${encodeURIComponent(projectId)}&limit=12`);
+  const data = await vercel(`/v6/deployments?projectId=${encodeURIComponent(projectId)}&limit=12`, {}, which);
   const list = (data.deployments || []).map((d) => ({ uid: d.uid, name: d.name, url: d.url, state: d.state || d.readyState, target: d.target || 'preview', createdAt: d.createdAt, ready: d.ready, creator: d.creator?.username || null, branch: d.meta?.githubCommitRef || null, sha: d.meta?.githubCommitSha || null, message: d.meta?.githubCommitMessage ? String(d.meta.githubCommitMessage).split('\n')[0] : null }));
   let project = null;
-  try { project = await vercel(`/v9/projects/${encodeURIComponent(projectId)}`); } catch { /* nome/produção atual são complementares */ }
+  try { project = await vercel(`/v9/projects/${encodeURIComponent(projectId)}`, {}, which); } catch { /* nome/produção atual são complementares */ }
   const productionId = project?.targets?.production?.id || null;
   return { configured: true, projectId, name: project?.name || list[0]?.name || null, productionId, deployments: list.map((d) => ({ ...d, current: d.uid === productionId })) };
 }
@@ -85,7 +90,7 @@ async function deployments(projectId) {
 async function overview() {
   const repos = await REPOS(), projects = await PROJECTS();
   const settle = (p) => p.then((v) => ({ ok: true, ...v })).catch((e) => ({ ok: false, erro: e.message, status: e.status || null }));
-  const [sra, dc, vsra, vdc] = await Promise.all([settle(repoSummary(repos.sra)), settle(repoSummary(repos.console)), settle(deployments(projects.sra)), settle(deployments(projects.console))]);
+  const [sra, dc, vsra, vdc] = await Promise.all([settle(repoSummary(repos.sra)), settle(repoSummary(repos.console)), settle(deployments(projects.sra, 'sra')), settle(deployments(projects.console, 'console'))]);
   return { ok: true, geradoEm: new Date().toISOString(), tokens: { github: Boolean(await getSecret('GITHUB_TOKEN')), vercel: Boolean(await getSecret('DEV_VERCEL_ACCESS_TOKEN')) }, repos: { sra, console: dc }, deploys: { sra: vsra, console: vdc } };
 }
 
@@ -101,7 +106,7 @@ async function changes() {
     settle(github(repos.sra, '/commits?sha=main&per_page=10')),
     settle(github(repos.sra, '/actions/runs?branch=main&per_page=10')),
     settle(github(repos.sra, '/contents/supabase?ref=main')),
-    settle(deployments(projects.sra)),
+    settle(deployments(projects.sra, 'sra')),
   ]);
   const commits = commitsR.ok ? (Array.isArray(commitsR.v) ? commitsR.v : []).map(normalizeCommit) : [];
   const runs = runsR.ok ? (runsR.v?.workflow_runs || []).map(normalizeRun) : [];
@@ -182,14 +187,14 @@ async function action(actor, input) {
   if (name === 'redeploy' || name === 'promote') {
     const projectId = projects[which]; if (!projectId) return [503, { erro: 'Projeto Vercel não configurado para este repositório.' }];
     const uid = String(input.deploymentId || '').trim(); if (!/^dpl_[A-Za-z0-9]{6,60}$/.test(uid)) return [400, { erro: 'Deploy inválido.' }];
-    const d = await vercel(`/v13/deployments/${uid}`);
+    const d = await vercel(`/v13/deployments/${uid}`, {}, which);
     if (d.projectId && d.projectId !== projectId) return [403, { erro: 'Este deploy não pertence ao projeto configurado.' }];
     if (name === 'promote') {
-      await vercel(`/v10/projects/${encodeURIComponent(projectId)}/promote/${uid}`, { method: 'POST' });
+      await vercel(`/v10/projects/${encodeURIComponent(projectId)}/promote/${uid}`, { method: 'POST' }, which);
       return [200, { ok: true, mensagem: 'Deploy promovido para produção.' }, { project: projectId, deployment: uid }];
     }
     const target = input.target === 'production' ? 'production' : undefined;
-    const r = await vercel('/v13/deployments', { method: 'POST', body: JSON.stringify({ name: d.name, deploymentId: uid, ...(target ? { target } : {}) }) });
+    const r = await vercel('/v13/deployments', { method: 'POST', body: JSON.stringify({ name: d.name, deploymentId: uid, ...(target ? { target } : {}) }) }, which);
     return [200, { ok: true, mensagem: 'Novo deploy iniciado.', url: r.url ? `https://${r.url}` : null, id: r.id }, { project: projectId, from: uid, target: target || 'preview' }];
   }
   return [400, { erro: 'Ação desconhecida.' }];
