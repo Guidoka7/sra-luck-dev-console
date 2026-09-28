@@ -59,3 +59,13 @@ test('Central de Problemas chama a URL configurada no cofre com o token M2M', as
     assert.equal(headers['x-dev-actor-role'], 'viewer');
   } finally { global.fetch = original; }
 });
+
+test('Engenharia: time do Sra Luck usa SRA_VERCEL_TEAM_ID e, sem ele, o time do Console', async () => {
+  const { teamFor } = require('../api/github-status');
+  valores = { DEV_VERCEL_TEAM_ID: 'team_novo' };
+  assert.equal(await teamFor('sra'), 'team_novo');
+  assert.equal(await teamFor('console'), 'team_novo');
+  valores = { DEV_VERCEL_TEAM_ID: 'team_console', SRA_VERCEL_TEAM_ID: 'team_app' };
+  assert.equal(await teamFor('sra'), 'team_app');
+  assert.equal(await teamFor('console'), 'team_console');
+});

@@ -1,5 +1,6 @@
 const { json, methodNotAllowed, requestId } = require('./_lib/http');
 const { rest } = require('./_lib/supabase');
+const { sraConnection } = require('./_lib/sra-config');
 
 module.exports=async function handler(req,res){
  if(req.method!=='GET')return methodNotAllowed(res,['GET']);
@@ -10,5 +11,9 @@ module.exports=async function handler(req,res){
  let db=false;
  if(env){try{await rest('dev_users?select=id&limit=1',{method:'GET'});db=true}catch{}}
  const ok=env&&db;
- return json(res,ok?200:503,{ok,status:ok?'ready':'not_ready',checks:{environment:env,database:db}});
+ // Origem efetiva do Sra Luck (URL pública do app, não é segredo): permite
+ // conferir de fora que todos os módulos apontam para o mesmo destino.
+ let sra={configured:false};
+ try{const c=await sraConnection();sra={configured:c.configured,origin:c.base,legacy:c.legacy,tokenConfigured:c.tokenConfigured}}catch{sra={configured:false,erro:'Falha ao ler a configuração do Sra Luck.'}}
+ return json(res,ok?200:503,{ok,status:ok?'ready':'not_ready',checks:{environment:env,database:db},sra});
 };

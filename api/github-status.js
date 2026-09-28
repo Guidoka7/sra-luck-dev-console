@@ -31,7 +31,9 @@ async function github(repo, path, init = {}) {
 // Cada projeto pode estar em um time diferente da Vercel (o sraluckapp e o
 // Dev Console estão em times distintos): o teamId vem do projeto consultado.
 async function teamFor(which) {
-  return String((await getSecret(which === 'sra' ? 'SRA_VERCEL_TEAM_ID' : 'DEV_VERCEL_TEAM_ID')) || '').trim();
+  const proprio = which === 'sra' ? String((await getSecret('SRA_VERCEL_TEAM_ID')) || '').trim() : '';
+  // Sem SRA_VERCEL_TEAM_ID, os dois projetos estão no mesmo time do Console.
+  return proprio || String((await getSecret('DEV_VERCEL_TEAM_ID')) || '').trim();
 }
 async function vercel(path, init = {}, which = 'console') {
   const token = String((await getSecret('DEV_VERCEL_ACCESS_TOKEN')) || '').trim();
@@ -239,3 +241,4 @@ module.exports = async function handler(req, res) {
   }
 };
 module.exports.changes = changes;
+module.exports.teamFor = teamFor;
