@@ -43,15 +43,28 @@
   function ler(card) {
     return [...card.querySelectorAll('[data-rd-campo]')].map((el) => ({ fonte: el.dataset.fonte, rotulo: el.querySelector('[data-rd-rotulo]').value.trim() }));
   }
+  function assinaturaOpcoes(opcoes) {
+    return opcoes.map((o) => `${o.value}|${o.text}|${o.disabled ? 1 : 0}`).join('\n');
+  }
   function reporSelect(select, opcoes, escolhidos) {
     if (!select) return;
-    select.innerHTML = `<option value="">Selecione um campo deste funil</option>${opcoes.map((o) => `<option value="${esc(o.fonte)}"${escolhidos.has(o.fonte) ? ' disabled' : ''}>${esc(o.rotulo)}</option>`).join('')}`;
+    const desejadas = [{ value: '', text: 'Selecione um campo deste funil', disabled: false }, ...opcoes.map((o) => ({ value: o.fonte, text: o.rotulo, disabled: escolhidos.has(o.fonte) }))];
+    const atuais = [...select.options].map((o) => ({ value: o.value, text: o.textContent || '', disabled: Boolean(o.disabled) }));
+    if (assinaturaOpcoes(atuais) === assinaturaOpcoes(desejadas)) return;
+    const atual = select.value;
+    select.innerHTML = desejadas.map((o) => `<option value="${esc(o.value)}"${o.disabled ? ' disabled' : ''}>${esc(o.text)}</option>`).join('');
+    if (desejadas.some((o) => o.value === atual && !o.disabled)) select.value = atual;
   }
   function reporMapeamento(select, opcoes) {
     const atual = select.value || 'auto';
     const base = [{ fonte: 'auto', rotulo: 'Automático' }, { fonte: 'ignorar', rotulo: 'Não importar' }, ...opcoes];
     if (!base.some((o) => o.fonte === atual)) base.push({ fonte: atual, rotulo: `Salvo anteriormente: ${atual}` });
-    select.innerHTML = base.map((o) => `<option value="${esc(o.fonte)}"${o.fonte === atual ? ' selected' : ''}>${esc(o.rotulo)}</option>`).join('');
+    const desejadas = base.map((o) => ({ value: o.fonte, text: o.rotulo, disabled: false }));
+    const atuais = [...select.options].map((o) => ({ value: o.value, text: o.textContent || '', disabled: Boolean(o.disabled) }));
+    if (assinaturaOpcoes(atuais) !== assinaturaOpcoes(desejadas)) {
+      select.innerHTML = desejadas.map((o) => `<option value="${esc(o.value)}">${esc(o.text)}</option>`).join('');
+    }
+    select.value = atual;
   }
   function hidratarCard(card) {
     if (!card || !ultimoOp) return;
@@ -64,7 +77,8 @@
       const fonte = row.dataset.fonte;
       const encontrado = opcoes.find((o) => o.fonte === fonte);
       const resumo = row.querySelector('[data-rd-origem-resumo]');
-      if (resumo) resumo.textContent = encontrado?.rotulo || `${fonte} · Salvo anteriormente; esta origem não está disponível neste funil agora.`;
+      const texto = encontrado?.rotulo || `${fonte} · Salvo anteriormente; esta origem não está disponível neste funil agora.`;
+      if (resumo && resumo.textContent !== texto) resumo.textContent = texto;
       row.classList.toggle('is-unavailable', !encontrado);
     });
     const mapeaveis = camposMapeaveis(ultimoOp, pipelineId);
@@ -78,7 +92,7 @@
     if (typeof document === 'undefined') return;
     const rootEl = rootNode?.querySelectorAll ? rootNode : document;
     rootEl.querySelectorAll('.dc-rd-funil').forEach(hidratarCard);
-    document.querySelectorAll('.dc-rd-default-map').forEach((el) => { el.style.display = 'none'; });
+    document.querySelectorAll('.dc-rd-default-map').forEach((el) => { if (el.style.display !== 'none') el.style.display = 'none'; });
   }
   function click(event) {
     const button = event.target.closest?.('[data-rd-adicionar], [data-rd-remover]');
