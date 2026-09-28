@@ -69,7 +69,7 @@ test('seleção, nome, remoção e reabertura continuam independentes por funil'
   assert.deepEqual(editor.ler(montar(salvo).querySelector('#a')), salvo);
   editor.click({ target: a.querySelector('[data-rd-remover]') });
   assert.deepEqual(editor.ler(a), []);
-  assert.equal([...a.querySelector('[data-rd-origem]').options].find((o) => o.value === 'deal:sdr').disabled, false);
+  assert.equal(Boolean([...a.querySelector('[data-rd-origem]').options].find((o) => o.value === 'deal:sdr').disabled), false);
 });
 
 test('fonte antiga é preservada e sinalizada, sem reaparecer como disponível', () => {
