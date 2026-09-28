@@ -89,10 +89,12 @@
     }
   }
   function hidratar(rootNode) {
-    if (typeof document === 'undefined') return;
-    const rootEl = rootNode?.querySelectorAll ? rootNode : document;
+    const globalDoc = typeof document !== 'undefined' ? document : null;
+    const rootEl = rootNode?.querySelectorAll ? rootNode : globalDoc;
+    if (!rootEl) return;
     rootEl.querySelectorAll('.dc-rd-funil').forEach(hidratarCard);
-    document.querySelectorAll('.dc-rd-default-map').forEach((el) => { if (el.style.display !== 'none') el.style.display = 'none'; });
+    const doc = rootEl.nodeType === 9 ? rootEl : (rootEl.ownerDocument || globalDoc);
+    doc?.querySelectorAll('.dc-rd-default-map').forEach((el) => { if (el.style.display !== 'none') el.style.display = 'none'; });
   }
   function click(event) {
     const button = event.target.closest?.('[data-rd-adicionar], [data-rd-remover]');
