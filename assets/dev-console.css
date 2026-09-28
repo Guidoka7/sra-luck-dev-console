@@ -528,3 +528,9 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}b
   .dc-rd-credential-body{grid-template-columns:1fr}
   .dc-rd-credential-body .dc-toolbar{flex-wrap:wrap}
 }
+
+/* Campos livres do CRM: uma seleção por funil. */
+.dc-rd-campo { display: grid; gap: 8px; padding: 12px; margin-block: 12px; border: 1px solid var(--border, #343943); border-radius: 10px; }
+.dc-rd-campo label { display: grid; gap: 6px; }
+.dc-rd-campo small { overflow-wrap: anywhere; }
+.dc-rd-campo button { justify-self: start; }

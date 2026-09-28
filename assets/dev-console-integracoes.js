@@ -93,6 +93,7 @@
               ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/><span>${esc(etapa.nome)}</span></label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
             </div>
           </section>
+          ${campo.camposLivres ? DCCrmCampos.render(cfg?.camposSelecionados || [], op, dis) : '<p class="dc-muted">A seleção livre de campos estará disponível após atualizar o backend do App.</p>'}
           <details class="dc-rd-subsection dc-rd-map-details">
             <summary><span><b>Preenchimento dos dados</b><small>${alterados ? `${alterados} diferente(s) do padrão` : 'Usando o preenchimento padrão'}</small></span><span>Editar campos</span></summary>
             <div class="dc-rd-map-grid">
@@ -228,7 +229,9 @@
         const etapas = [...(card?.querySelectorAll('[data-rd-stage]:checked') || [])].map((x) => x.value);
         const mapeamento = {};
         (card?.querySelectorAll('[data-rd-map]') || []).forEach((sel) => { mapeamento[sel.dataset.sub] = sel.value; });
-        cfg.funis.push({ pipelineId, etapas, mapeamento });
+        const funil = { pipelineId, etapas, mapeamento };
+        if ((f.campos || []).some((c) => c.tipo === 'rd_funis' && c.camposLivres)) funil.camposSelecionados = DCCrmCampos.ler(card);
+        cfg.funis.push(funil);
       });
       // Garante que a configuração nova substitua o formato antigo de um único funil.
       cfg.pipelineId = null;
@@ -435,6 +438,7 @@
       }
     });
     ov.addEventListener('click', async (e) => {
+      if (DCCrmCampos.click(e)) return;
       const abrirFunil = e.target.closest?.('[data-rd-funil-open]');
       if (abrirFunil) {
         const card = abrirFunil.closest('.dc-rd-funil');

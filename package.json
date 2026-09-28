@@ -17,5 +17,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Guidoka7/sra-luck-dev-console.git"
+  },
+  "devDependencies": {
+    "linkedom": "^0.18.13"
   }
 }
