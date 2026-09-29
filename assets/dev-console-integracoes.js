@@ -621,7 +621,16 @@
       if (S.opcoes[id]?.erro) return;
       const config = lerFormulario(form, f);
       const btn = form.querySelector('[type="submit"]');
-      const r = await DC.action(btn, () => DC.api('/api/admin/integrations/config', { method: 'POST', body: { provedor: id, funcao: form.dataset.cfg, config, versao: Number(form.dataset.versao) } }), { success: 'Função salva. Vale a partir da próxima execução (até 30 s de cache).' });
+      const enviar = () => DC.api('/api/admin/integrations/config', { method: 'POST', body: { provedor: id, funcao: form.dataset.cfg, config, versao: Number(form.dataset.versao) } });
+      let r = await DC.action(btn, enviar, { success: 'Função salva. Vale a partir da próxima execução (até 30 s de cache).' });
+      // A configuração mudou enquanto a tela estava aberta: antes toda nova tentativa era recusada e
+      // recarregar apagava a seleção. Agora as escolhas desta tela são mantidas e podem ser gravadas
+      // por cima da versão nova, com confirmação.
+      if (!r?.ok && r?.data?.codigo === 'conflito_versao' && Number.isFinite(Number(r.data.versaoAtual))) {
+        form.dataset.versao = String(r.data.versaoAtual);
+        const ok = await DC.modal('Configuração alterada enquanto você editava', `<div class="dc-warn-box">A função passou para a versão ${esc(String(r.data.versaoAtual))} depois que esta tela foi aberta. As escolhas que estão na tela (funis, etapas, filtros e preenchimento) serão gravadas por cima.</div>`, { confirmText: 'Salvar minhas escolhas' });
+        if (ok) r = await DC.action(btn, enviar, { success: 'Função salva. Vale a partir da próxima execução (até 30 s de cache).' });
+      }
       if (r?.ok) { await carregar(); aoSalvar?.(id); }
     });
     ov.addEventListener('change', (e) => {
