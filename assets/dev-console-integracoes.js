@@ -33,12 +33,20 @@
 
   // ------------------------------------------------------------------ formulário genérico
 
+  // O RD monta as opções lendo negociações e contatos de cada funil: em contas grandes passa de 30 s.
+  const OPCOES_TIMEOUT = 90000;
+  const carregandoOpcoes = {};
+
   async function opcoesDe(provedor) {
     if (!OPCOES_URL[provedor]) return null;
     if (S.opcoes[provedor] && !S.opcoes[provedor].erro) return S.opcoes[provedor];
-    const r = await DC.api(OPCOES_URL[provedor], { timeout: 30000 });
-    S.opcoes[provedor] = r.ok ? r.data : { erro: r.error || 'Lista do provedor indisponível.' };
-    return S.opcoes[provedor];
+    // Reaproveita a leitura em andamento: "Tentar novamente" não dispara uma segunda varredura no RD.
+    if (!carregandoOpcoes[provedor]) {
+      carregandoOpcoes[provedor] = DC.api(OPCOES_URL[provedor], { timeout: OPCOES_TIMEOUT })
+        .then((r) => { S.opcoes[provedor] = r.ok ? r.data : { erro: r.error || 'Lista do provedor indisponível.' }; return S.opcoes[provedor]; })
+        .finally(() => { delete carregandoOpcoes[provedor]; });
+    }
+    return carregandoOpcoes[provedor];
   }
 
   function lista(campo, op, valores) {
@@ -62,6 +70,7 @@
     const mapaPadrao = valores.mapeamento || {};
     const fontes = [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }, ...(op?.campos || []).map((c) => ({ valor: `${c.entidade}:${c.slug}`, rotulo: `${c.entidade === 'deal' ? 'Negociação' : 'Contato'}: ${c.nome}` }))];
     const funis = op?.funis || [];
+    if (op?.erro) return '<div class="dc-ip-full"><small class="dc-muted">Os funis aparecem quando as listas do RD Station carregarem. A seleção salva não foi alterada.</small></div>';
     if (!funis.length) return '<div class="dc-ip-full"><div class="dc-warn-box">Nenhum funil foi retornado pelo RD Station.</div></div>';
 
     const mapaAlterado = (mapa) => (campo.itens || []).filter((it) => {
@@ -442,7 +451,7 @@
       const recarregar = e.target.closest?.('[data-recarregar-opcoes]');
       if (recarregar) {
         recarregar.disabled = true;
-        recarregar.textContent = 'Carregando…';
+        recarregar.textContent = 'Carregando… (pode levar até 1 min)';
         delete S.opcoes[id];
         try { await preencherFormularios(ov, i); }
         finally { recarregar.disabled = false; recarregar.textContent = 'Tentar novamente'; }
