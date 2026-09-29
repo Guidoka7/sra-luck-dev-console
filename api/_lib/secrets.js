@@ -2,6 +2,18 @@ const crypto = require('crypto');
 const { rest } = require('./supabase');
 
 const CATALOG = {
+  bi: {
+    name: 'BI interno · RD Station, Conta Azul e n8n',
+    setupOnly: true,
+    description: 'Conexão exclusiva do BI. Cadastro de credenciais disponível; OAuth, coleta e dashboards ainda não ativados. Não reutiliza os tokens da importação de clientes. Não é uma conexão com o Microsoft Power BI.',
+    fields: [
+      { key:'BI_RD_CLIENT_ID', label:'RD Station · Client ID do BI', secret:false },
+      { key:'BI_RD_CLIENT_SECRET', label:'RD Station · Client Secret do BI', secret:true },
+      { key:'BI_CONTA_AZUL_CLIENT_ID', label:'Conta Azul · Client ID do BI', secret:false },
+      { key:'BI_CONTA_AZUL_CLIENT_SECRET', label:'Conta Azul · Client Secret do BI', secret:true },
+      { key:'BI_N8N_BASE_URL', label:'n8n · URL da instância', secret:false, format:'https-url', placeholder:'https://automacoes.sua-empresa.com' },
+    ],
+  },
   sra_luck: {
     name: 'Sra Luck',
     fields: [
@@ -103,6 +115,11 @@ async function saveSecret(name,value,actor){
   if(!ALLOWED.has(name)) throw Object.assign(new Error('Credencial técnica desconhecida.'),{status:400});
   const clean=String(value||'').trim();
   if(!clean) throw Object.assign(new Error('Informe o valor.'),{status:400});
+  if(ALLOWED.get(name).format==='https-url'){
+    let url;try{url=new URL(clean)}catch{}
+    if(!url||url.protocol!=='https:'||url.username||url.password||url.search||url.hash)
+      throw Object.assign(new Error('Informe uma URL HTTPS sem credenciais, parâmetros ou fragmento.'),{status:400});
+  }
   const payload={name,...encrypt(clean),updated_by:String(actor||'dev'),updated_at:new Date().toISOString()};
   await rest('dev_connector_secrets?on_conflict=name',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(payload)});
   clearCache();
@@ -131,7 +148,7 @@ async function catalogStatus(){
       }
       fields.push({...f,configured:Boolean(row||env),source:row?'cofre_dev':env?'variavel_ambiente':'nao_configurado',masked,visible,updatedAt:row?.updated_at||null});
     }
-    groups.push({id,name:g.name,fields});
+    groups.push({id,name:g.name,fields,...(g.setupOnly?{setupOnly:true,description:g.description}: {})});
   }
   return groups;
 }
