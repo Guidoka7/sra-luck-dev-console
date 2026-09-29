@@ -55,14 +55,15 @@ test('cada funil mostra filtros com os valores do RD (vendedoras) e o catálogo 
   assert.match(document.body.textContent, /100 negociações mais recentes/);
 });
 
-test('preenchimento: origem sugerida no lugar de Automático; origem salva é mantida; sem sugestão pede definição', () => {
+test('preenchimento: sem opção genérica; origem sugerida ou Não importar (a definir); origem salva é mantida', () => {
   const { document } = montar({ funis: [{ pipelineId: F1, etapas: [], mapeamento: { ...auto, banco: 'ignorar' } }] });
   const sel = (sub) => document.querySelector(`[data-rd-map][data-pipeline="${F1}"][data-sub="${sub}"]`);
   const selecionado = (s) => [...s.querySelectorAll('option')].find((o) => o.hasAttribute('selected'))?.getAttribute('value');
   assert.equal(selecionado(sel('cpf')), 'contact:cpf');
   assert.equal(selecionado(sel('vendedora')), 'deal_field:owner_id');
   assert.equal(selecionado(sel('banco')), 'ignorar');
-  assert.equal(selecionado(sel('procedimento')), 'auto');
+  assert.equal(selecionado(sel('procedimento')), 'ignorar');
+  assert.ok(![...sel('procedimento').querySelectorAll('option')].some((o) => o.getAttribute('value') === 'auto'));
   assert.ok(sel('cpf').hasAttribute('data-rd-map-explicito'));
   // Só origens do próprio funil, agrupadas.
   assert.deepEqual([...sel('cpf').querySelectorAll('optgroup')].map((g) => g.getAttribute('label')), ['Negociação · campos do RD', 'Negociação · campos personalizados', 'Contato · campos personalizados']);

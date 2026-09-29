@@ -71,17 +71,16 @@
   ];
   const semPrefixo = (r) => String(r || '').replace(/^(Negociação|Contato):\s*/, '');
 
-  // Origem de um dado do Sra Luck neste funil. "Automático" (leitura antiga) dá lugar à sugestão concreta do catálogo.
+  // Origem de um dado do Sra Luck neste funil: só origens reais do próprio funil ou "Não importar".
+  // Nada genérico: o "Automático" antigo vira a sugestão concreta do catálogo ou "Não importar" (a definir).
   function origemSelectHtml(funil, atual, sugestao, dis, attrs) {
     const fontes = (funil.fontes || []).filter((f) => f.mapeavel !== false);
-    const valor = atual && atual !== 'auto' ? atual : (sugestao || 'auto');
+    const valor = atual && atual !== 'auto' ? atual : (sugestao || 'ignorar');
     const amostra = (f) => {
       const total = f.grupo.startsWith('deal') ? funil.amostra?.negociacoes : funil.amostra?.contatos;
       return total ? ` · ${f.preenchidas}/${total}` : '';
     };
-    const extras = valor === 'auto'
-      ? '<option value="auto" selected>Automático (leitura antiga) · escolha uma origem</option>'
-      : valor !== 'ignorar' && !fontes.some((f) => f.fonte === valor) ? `<option value="${esc(valor)}" selected>Salvo anteriormente: ${esc(valor)} · não encontrado neste funil</option>` : '';
+    const extras = valor !== 'ignorar' && !fontes.some((f) => f.fonte === valor) ? `<option value="${esc(valor)}" selected>Salvo anteriormente: ${esc(valor)} · não encontrado neste funil</option>` : '';
     const grupos = GRUPOS_FONTE.map(([g, rot]) => {
       const itens = fontes.filter((f) => f.grupo === g);
       return itens.length ? `<optgroup label="${esc(rot)}">${itens.map((f) => `<option value="${esc(f.fonte)}"${f.fonte === valor ? ' selected' : ''}>${esc(semPrefixo(f.rotulo))}${f.fonte === sugestao ? ' · sugerido' : ''}${amostra(f)}</option>`).join('')}</optgroup>` : '';
@@ -256,7 +255,7 @@
         return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-map">${(campo.itens || []).map((it) => `<span>${esc(it.rotulo)}</span><select data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="mapa"${dis}>${opcoesHtml(itens, v?.[it.chave] ?? 'auto', false)}</select>`).join('')}</div>${aj}</div>`;
       }
       case 'grupo_booleano':
-        if (f.id === 'importacao' && campo.chave === 'deduplicarPor') return `<div class="dc-ip-full dc-rd-dedupe"><span><b>${esc(rot)}</b><small>Evita criar a mesma cliente novamente.</small></span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div></div>`;
+        if (f.id === 'importacao' && campo.chave === 'deduplicarPor') return `<div class="dc-ip-full dc-rd-dedupe"><span><b>${esc(rot)}</b><small>${esc(ajuda || 'Evita criar a mesma cliente novamente.')}</small></span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div></div>`;
         return `<div class="dc-ip-full"><span>${esc(rot)}</span><div class="dc-ip-checks">${(campo.itens || []).map((it) => `<label><input type="checkbox" data-c="${esc(campo.chave)}" data-sub="${esc(it.chave)}" data-t="grupo"${v?.[it.chave] !== false ? ' checked' : ''}${dis}/>${esc(it.rotulo)}</label>`).join('')}</div>${aj}</div>`;
       case 'rd_funis': return rdFunisHtml(campo, valores, op, dis);
       default: return '';
