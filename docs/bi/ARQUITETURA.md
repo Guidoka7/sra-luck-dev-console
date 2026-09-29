@@ -203,3 +203,8 @@ Casos obrigatórios: mais de uma página, falha na página intermediária, rein�
 - https://developers.contaazul.com/docs/financial-apis-openapi — recursos financeiros.
 
 Validar endpoints, campos, limites e permissões com a versão/conta real antes de ativar qualquer workflow. Este desenho não é um workflow n8n importável nem afirma conexão já operacional.
+
+
+## Implementação da recepção — 29/09/2026
+
+A fundação agora possui OAuth dedicado, tela `bi.html`, catálogo, seleção por funil, cargas retomáveis e ponte M2M. Consulte [COLETA.md](COLETA.md) para ativação, contrato n8n, testes e limites. Indicadores, atualização contínua e Conta Azul ainda não estão ativos.

@@ -14,6 +14,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/bi/oauth/callback",
+      "destination": "/api/infra-scan?mode=bi&action=callback"
+    },
+    {
+      "source": "/api/bi",
+      "destination": "/api/infra-scan?mode=bi"
+    },
+    {
       "source": "/api/auth/login",
       "destination": "/api/auth-login"
     },

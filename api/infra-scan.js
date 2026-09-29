@@ -82,6 +82,7 @@ async function persistScan(overview){
 }
 module.exports=async function handler(req,res){
  const mode=String(req.query?.mode||'scan');
+ if(mode==='bi')return require('./_lib/bi').handler(req,res);
  res.setHeader('x-request-id',requestId(req));
 
  // Central de Problemas (rewrite /api/problemas). Mora aqui para não criar uma

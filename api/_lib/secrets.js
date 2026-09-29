@@ -5,8 +5,10 @@ const CATALOG = {
   bi: {
     name: 'BI interno · RD Station, Conta Azul e n8n',
     setupOnly: true,
-    description: 'Conexão exclusiva do BI. Cadastro de credenciais disponível; OAuth, coleta e dashboards ainda não ativados. Não reutiliza os tokens da importação de clientes. Não é uma conexão com o Microsoft Power BI.',
+    description: 'Conexão exclusiva do BI. OAuth e coleta paginada disponíveis após configurar e autorizar. Indicadores ainda não ativados. Não reutiliza os tokens da importação de clientes. Não é uma conexão com o Microsoft Power BI.',
     fields: [
+      { key:'BI_CONSOLE_BASE_URL', label:'BI · URL oficial deste Console (sem caminho)', secret:false, format:'https-url', placeholder:'https://sra-luck-dev-console-ten.vercel.app' },
+      { key:'BI_AUTOMATION_TOKEN', label:'BI · Token exclusivo da automação (mínimo 32 caracteres)', secret:true, minLength:32 },
       { key:'BI_RD_CLIENT_ID', label:'RD Station · Client ID do BI', secret:false },
       { key:'BI_RD_CLIENT_SECRET', label:'RD Station · Client Secret do BI', secret:true },
       { key:'BI_CONTA_AZUL_CLIENT_ID', label:'Conta Azul · Client ID do BI', secret:false },
@@ -114,6 +116,7 @@ async function getSecret(name,{fallback=true}={}){
 async function saveSecret(name,value,actor){
   if(!ALLOWED.has(name)) throw Object.assign(new Error('Credencial técnica desconhecida.'),{status:400});
   const clean=String(value||'').trim();
+  if(ALLOWED.get(name).minLength&&clean.length<ALLOWED.get(name).minLength)throw Object.assign(new Error('Use ao menos 32 caracteres aleatórios.'),{status:400});
   if(!clean) throw Object.assign(new Error('Informe o valor.'),{status:400});
   if(ALLOWED.get(name).format==='https-url'){
     let url;try{url=new URL(clean)}catch{}
