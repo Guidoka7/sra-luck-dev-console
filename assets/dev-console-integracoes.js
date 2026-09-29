@@ -30,6 +30,12 @@
   const podeConfigurar = () => Boolean(DC.currentUser);
   const chip = (s) => DC.chip(...(SITUACAO[s] || [s, 'neutral']));
   const quando = (v) => (v ? DC.dateTimeFmt.format(new Date(v)) : '—');
+  /** Importação do RD em etapas: quanto da passada atual já foi lido. */
+  const textoPassada = (p) => {
+    if (!p) return '';
+    const lidas = Number(p.lidas || 0).toLocaleString('pt-BR');
+    return p.concluida ? ` · leitura completa do RD (${lidas} negociações)` : ` · leitura em etapas: ${lidas} negociações até agora, continua sozinha a cada 5 min`;
+  };
 
   // ------------------------------------------------------------------ formulário genérico
 
@@ -400,7 +406,7 @@
       ${!imps.data.disponivel ? '<div class="dc-warn-box">Estrutura de histórico ainda não aplicada no Sra Luck (migration_091).</div>' : ''}
       ${revisao.length ? `<h3 class="dc-nc-h">Aguardando revisão no Admin (${revisao.length})</h3><div class="dc-ip-list">${revisao.map(itemHtml).join('')}</div>` : ''}
       <h3 class="dc-nc-h">Histórico de importações</h3>
-      <div class="dc-ip-list">${lista.map((i) => `<button type="button" class="dc-ip-row dc-ip-click" data-imp="${esc(i.id)}"><b>${esc(quando(i.iniciado_em))}</b><span>${esc(i.origem)} · ${i.totais?.totalRd ?? 0} lida(s) · ${i.totais?.criadas ?? 0} nova(s) · ${(i.totais?.duplicadas ?? 0) + (i.totais?.clienteExistente ?? 0)} duplicidade(s)${i.erro ? `<small>${esc(i.erro)}</small>` : ''}${i.filtro ? `<small class="dc-mono">${esc(i.filtro)}</small>` : ''}</span>${DC.chip(i.status, i.status === 'concluida' ? 'ok' : i.status === 'erro' ? 'bad' : 'warn')}</button><div data-itens="${esc(i.id)}" hidden></div>`).join('') || '<div class="dc-empty">Nenhuma importação registrada.</div>'}</div>`;
+      <div class="dc-ip-list">${lista.map((i) => `<button type="button" class="dc-ip-row dc-ip-click" data-imp="${esc(i.id)}"><b>${esc(quando(i.iniciado_em))}</b><span>${esc(i.origem)} · ${i.totais?.totalRd ?? 0} lida(s) · ${i.totais?.criadas ?? 0} nova(s) · ${(i.totais?.duplicadas ?? 0) + (i.totais?.clienteExistente ?? 0)} duplicidade(s)${esc(textoPassada(i.totais?.passada))}${i.erro ? `<small>${esc(i.erro)}</small>` : ''}${i.filtro ? `<small class="dc-mono">${esc(i.filtro)}</small>` : ''}</span>${DC.chip(i.status, i.status === 'concluida' ? 'ok' : i.status === 'erro' ? 'bad' : 'warn')}</button><div data-itens="${esc(i.id)}" hidden></div>`).join('') || '<div class="dc-empty">Nenhuma importação registrada.</div>'}</div>`;
   }
 
   // Conta Azul: leitura da operação.
@@ -604,7 +610,7 @@
       if (botao) {
         if (!await DC.modal('Importar do RD Station', '<div class="dc-note">Lê o RD (somente leitura) com o funil, as etapas e o mapeamento configurados. Clientes novas entram em Aguardando cadastro; duplicidades vão para revisão no Admin.</div>', { confirmText: 'Importar agora' })) return;
         const r = await DC.action(botao, () => DC.api('/api/admin/integrations/rd-station/importar', { method: 'POST', body: {}, timeout: 60000 }));
-        if (r?.ok) DC.toast(`RD: ${r.data.totalRd ?? 0} lida(s) · ${r.data.criadas ?? 0} nova(s) · ${(r.data.duplicadas ?? 0) + (r.data.clienteExistente ?? 0)} para revisar.`);
+        if (r?.ok) DC.toast(`RD: ${r.data.totalRd ?? 0} lida(s) · ${r.data.criadas ?? 0} nova(s) · ${(r.data.duplicadas ?? 0) + (r.data.clienteExistente ?? 0)} para revisar${textoPassada(r.data.passada)}.`);
         carregados.delete('importacoes'); carregarExtra('importacoes');
       }
     });
