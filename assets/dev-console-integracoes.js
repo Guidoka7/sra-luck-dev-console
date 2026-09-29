@@ -30,6 +30,12 @@
   const podeConfigurar = () => Boolean(DC.currentUser);
   const chip = (s) => DC.chip(...(SITUACAO[s] || [s, 'neutral']));
   const quando = (v) => (v ? DC.dateTimeFmt.format(new Date(v)) : '—');
+  /** Quantas negociações o funil tem no RD (catálogo; acima de 10 mil o RD só permite estimar). */
+  const totalNoRd = (funil) => {
+    const t = funil?.total;
+    if (!t || t.negociacoes == null) return '';
+    return `${t.exato ? '' : '≈ '}${Number(t.negociacoes).toLocaleString('pt-BR')} negociação(ões) no RD · `;
+  };
   /** Importação do RD em etapas: quanto da passada atual já foi lido. */
   const textoPassada = (p) => {
     if (!p) return '';
@@ -183,7 +189,7 @@
         <div class="dc-rd-funil-row">
           <label class="dc-rd-funil-main">
             <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
-            <span><b>${esc(funil.nome)}</b><small>${marcado ? resumo : `${totalEtapas} etapa(s)${funil.amostra ? ` · ${funil.amostra.negociacoes} negociação(ões) na amostra` : ''}`}</small></span>
+            <span><b>${esc(funil.nome)}</b><small>${totalNoRd(funil)}${marcado ? resumo : `${totalEtapas} etapa(s)`}</small></span>
           </label>
           <button type="button" class="dc-rd-config-btn" data-rd-funil-open="${esc(funil.id)}" aria-expanded="false"${marcado ? '' : ' disabled'}>Configurar</button>
         </div>
