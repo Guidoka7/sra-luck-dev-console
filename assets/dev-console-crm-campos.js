@@ -9,6 +9,8 @@
   function fontes(op, pipelineId) {
     const f = funil(op, pipelineId);
     if (!f) return [];
+    // Catálogo novo: origens do funil já com nomes legíveis (campos padrão e personalizados).
+    if (Array.isArray(f.fontes)) return f.fontes.map((x) => ({ fonte: x.fonte, rotulo: x.rotulo }));
     return [...(f.camposNativos || []), ...(f.campos || []).map((c) => ({
       fonte: `${c.entidade}:${c.slug}`, rotulo: `${c.entidade === 'deal' ? 'Negociação' : 'Contato'}: ${c.nome}`,
     }))];
@@ -82,9 +84,10 @@
       row.classList.toggle('is-unavailable', !encontrado);
     });
     const mapeaveis = camposMapeaveis(ultimoOp, pipelineId);
-    card.querySelectorAll('[data-rd-map]').forEach((select) => reporMapeamento(select, mapeaveis));
+    // Seletores explícitos (origem por dado) já vêm montados do catálogo; não são reescritos aqui.
+    card.querySelectorAll('[data-rd-map]:not([data-rd-map-explicito])').forEach((select) => reporMapeamento(select, mapeaveis));
     const body = card.querySelector('.dc-rd-funil-body');
-    if (body && !body.querySelector('[data-rd-escopo-aviso]')) {
+    if (body && !body.querySelector('[data-rd-escopo-aviso], .dc-rd-amostra')) {
       body.insertAdjacentHTML('afterbegin', `<div class="dc-note" data-rd-escopo-aviso><b>Origens deste funil.</b> ${opcoes.length} campo(s) disponível(is) encontrados nas negociações e contatos deste pipeline.</div>`);
     }
   }

@@ -27,3 +27,20 @@ test('falha de carregamento bloqueia salvar e oferece nova tentativa', () => {
   assert.ok(document.querySelector('[data-c="ativo"]').hasAttribute('disabled'));
   assert.match(document.textContent || html, /configuração existente foi preservada/);
 });
+test('nova tentativa durante a leitura reaproveita a mesma chamada e usa timeout longo', async () => {
+  const chamadas = [];
+  let liberar;
+  const t = carregar((url, init) => { chamadas.push(init); return new Promise((r) => { liberar = r; }); });
+  const a = t.opcoesDe('rd_station'), b = t.opcoesDe('rd_station');
+  await Promise.resolve();
+  liberar({ ok: true, data: { funis: [] } });
+  assert.deepEqual(await a, await b);
+  assert.equal(chamadas.length, 1);
+  assert.ok(chamadas[0].timeout > 30000);
+});
+test('falha nas listas não diz que o RD não tem funis', () => {
+  const t = carregar(async () => ({}));
+  const html = t.formHtml({ id: 'rd_station' }, { id: 'importacao', config: { funis: [] }, versao: 10, campos: [{ chave: 'funis', tipo: 'rd_funis', rotulo: 'Funis', itens: [] }] }, { erro: 'Tempo limite excedido' });
+  assert.doesNotMatch(html, /Nenhum funil foi retornado/);
+  assert.match(html, /seleção salva não foi alterada/);
+});
