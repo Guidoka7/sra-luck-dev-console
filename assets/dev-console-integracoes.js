@@ -35,7 +35,7 @@
 
   async function opcoesDe(provedor) {
     if (!OPCOES_URL[provedor]) return null;
-    if (S.opcoes[provedor]) return S.opcoes[provedor];
+    if (S.opcoes[provedor] && !S.opcoes[provedor].erro) return S.opcoes[provedor];
     const r = await DC.api(OPCOES_URL[provedor], { timeout: 30000 });
     S.opcoes[provedor] = r.ok ? r.data : { erro: r.error || 'Lista do provedor indisponível.' };
     return S.opcoes[provedor];
@@ -170,11 +170,12 @@
   }
 
   function formHtml(i, f, op) {
-    const editavelAqui = Boolean(f.config), pode = editavelAqui && podeConfigurar(), dis = pode ? '' : ' disabled';
+    const bloqueado = Boolean(op?.erro);
+    const editavelAqui = Boolean(f.config), pode = editavelAqui && podeConfigurar() && !bloqueado, dis = pode ? '' : ' disabled';
     const c = f.config || {}, campos = f.campos || [];
     const uso = campos.some((x) => x.chave === 'limiteDiario') ? (c.limiteDiario ? `${f.usoHoje}/${c.limiteDiario} chamadas hoje` : `${f.usoHoje} chamada(s) hoje · sem limite`) : '';
     const rodape = !editavelAqui ? '<small class="dc-muted">Esta função não possui parâmetros configuráveis.</small>'
-      : pode ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Seu acesso não permite alterar.</small>';
+      : bloqueado ? '<small class="dc-muted">Carregue as opções antes de salvar. A configuração existente foi preservada.</small>' : pode ? '<button class="dc-btn primary" type="submit">Salvar função</button>' : '<small class="dc-muted">Seu acesso não permite alterar.</small>';
     const rdImport = i.id === 'rd_station' && f.id === 'importacao';
 
     if (rdImport) {
@@ -183,7 +184,7 @@
       const funis = campos.filter((campo) => campo.tipo === 'rd_funis');
       const dedupe = campos.filter((campo) => campo.tipo === 'grupo_booleano');
       return `<form class="dc-ip-form dc-rd-import-form" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
-        ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)}</div>` : ''}
+        ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)} <button type="button" class="dc-btn" data-recarregar-opcoes>Tentar novamente</button></div>` : ''}
         ${uso ? `<small class="dc-muted">${esc(uso)}</small>` : ''}
         <div class="dc-rd-config-stack">
           <section class="dc-rd-block">
@@ -199,7 +200,7 @@
     }
 
     return `<form class="dc-ip-form" data-cfg="${esc(f.id)}" data-versao="${f.versao}">
-      ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)}</div>` : ''}
+      ${op?.erro ? `<div class="dc-warn-box">Listas do provedor indisponíveis: ${esc(op.erro)} <button type="button" class="dc-btn" data-recarregar-opcoes>Tentar novamente</button></div>` : ''}
       ${uso ? `<small class="dc-muted">${esc(uso)}</small>` : ''}
       <div class="dc-ip-grid">${campos.map((campo) => campoHtml(f, campo, c, op, dis)).join('')}</div>
       <footer><small class="dc-muted">${f.versao ? `Versão ${f.versao} · ${f.atualizadoEm ? DC.relTime(f.atualizadoEm) : ''}` : 'Sem configuração salva: valem os padrões do sistema.'}</small>${rodape}</footer>
@@ -438,6 +439,15 @@
       }
     });
     ov.addEventListener('click', async (e) => {
+      const recarregar = e.target.closest?.('[data-recarregar-opcoes]');
+      if (recarregar) {
+        recarregar.disabled = true;
+        recarregar.textContent = 'Carregando…';
+        delete S.opcoes[id];
+        try { await preencherFormularios(ov, i); }
+        finally { recarregar.disabled = false; recarregar.textContent = 'Tentar novamente'; }
+        return;
+      }
       if (DCCrmCampos.click(e)) return;
       const abrirFunil = e.target.closest?.('[data-rd-funil-open]');
       if (abrirFunil) {
@@ -483,6 +493,7 @@
       const form = e.target.closest('[data-cfg]'); if (!form) return;
       e.preventDefault();
       const f = i.funcoes.find((x) => x.id === form.dataset.cfg);
+      if (S.opcoes[id]?.erro) return;
       const config = lerFormulario(form, f);
       const btn = form.querySelector('[type="submit"]');
       const r = await DC.action(btn, () => DC.api('/api/admin/integrations/config', { method: 'POST', body: { provedor: id, funcao: form.dataset.cfg, config, versao: Number(form.dataset.versao) } }), { success: 'Função salva. Vale a partir da próxima execução (até 30 s de cache).' });
