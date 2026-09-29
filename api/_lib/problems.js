@@ -200,7 +200,9 @@ function detectNotifications(data, out) {
   }
   const allLogs = n.logs || [];
   const lastOf = (tipo) => allLogs.filter(l => l.tipo === tipo).reduce((m, l) => (!m || new Date(l.created_at) > new Date(m) ? l.created_at : m), null);
-  const freq = Math.max(1, Number(n.config?.frequencia_atraso_horas) || 24);
+  // A rotina de lembretes roda uma vez por dia (pg_cron 08:05, migration_120 do Sra Luck): a janela
+  // mínima é de 24h, mesmo que o intervalo configurado entre avisos seja menor.
+  const freq = Math.max(24, Number(n.config?.frequencia_atraso_horas) || 24);
   if (n.config?.atraso_habilitado !== false && Number(n.atrasadas) > 0 && ageMs(lastOf('parcela_atrasada')) > (freq + 2) * HOUR) {
     out.push(problem({ id: 'notificacoes:rotina-atraso', dominio: 'notificacoes', tipo: 'operacional', severidade: 'high', titulo: 'Rotina de lembrete de parcela atrasada parada', descricao: `${n.atrasadas} parcela(s) atrasada(s) e nenhum lembrete enviado nas últimas ${freq + 2}h.`, impacto: 'Clientes em atraso não estão sendo lembradas.', evidencias: [{ label: 'Último envio', valor: lastOf('parcela_atrasada') || 'nunca' }], acoes: [{ id: 'link', label: 'Abrir Notificações', tipo: 'link', href: 'notificacoes.html', descricao: 'A correção pelo Dev Console está bloqueada porque o conector M2M do Sra Luck aceita somente leitura (GET/HEAD).' }] }));
   }
