@@ -33,8 +33,8 @@
 
   // ------------------------------------------------------------------ formulário genérico
 
-  // O RD monta as opções lendo negociações e contatos de cada funil: em contas grandes passa de 30 s.
-  const OPCOES_TIMEOUT = 90000;
+  // O catálogo do RD vem pré-calculado; só a primeira montagem (sem catálogo guardado) lê o RD.
+  const OPCOES_TIMEOUT = 45000;
   const carregandoOpcoes = {};
 
   async function opcoesDe(provedor) {
@@ -65,19 +65,100 @@
     return `${vazio ? '<option value="">—</option>' : ''}${l.map((o) => `<option value="${esc(o.valor)}"${String(o.valor) === String(atual ?? '') ? ' selected' : ''}>${esc(o.rotulo)}</option>`).join('')}`;
   };
 
+  const GRUPOS_FONTE = [
+    ['deal_nativo', 'Negociação · campos do RD'], ['deal_personalizado', 'Negociação · campos personalizados'],
+    ['contact_nativo', 'Contato · campos do RD'], ['contact_personalizado', 'Contato · campos personalizados'],
+  ];
+  const semPrefixo = (r) => String(r || '').replace(/^(Negociação|Contato):\s*/, '');
+
+  // Origem de um dado do Sra Luck neste funil. "Automático" (leitura antiga) dá lugar à sugestão concreta do catálogo.
+  function origemSelectHtml(funil, atual, sugestao, dis, attrs) {
+    const fontes = (funil.fontes || []).filter((f) => f.mapeavel !== false);
+    const valor = atual && atual !== 'auto' ? atual : (sugestao || 'auto');
+    const amostra = (f) => {
+      const total = f.grupo.startsWith('deal') ? funil.amostra?.negociacoes : funil.amostra?.contatos;
+      return total ? ` · ${f.preenchidas}/${total}` : '';
+    };
+    const extras = valor === 'auto'
+      ? '<option value="auto" selected>Automático (leitura antiga) · escolha uma origem</option>'
+      : valor !== 'ignorar' && !fontes.some((f) => f.fonte === valor) ? `<option value="${esc(valor)}" selected>Salvo anteriormente: ${esc(valor)} · não encontrado neste funil</option>` : '';
+    const grupos = GRUPOS_FONTE.map(([g, rot]) => {
+      const itens = fontes.filter((f) => f.grupo === g);
+      return itens.length ? `<optgroup label="${esc(rot)}">${itens.map((f) => `<option value="${esc(f.fonte)}"${f.fonte === valor ? ' selected' : ''}>${esc(semPrefixo(f.rotulo))}${f.fonte === sugestao ? ' · sugerido' : ''}${amostra(f)}</option>`).join('')}</optgroup>` : '';
+    }).join('');
+    return `<select ${attrs}${dis}>${extras}<option value="ignorar"${valor === 'ignorar' ? ' selected' : ''}>Não importar</option>${grupos}</select>`;
+  }
+
+  function filtrosHtml(funil, cfg, dis) {
+    const filtros = funil.filtros || [];
+    if (!filtros.length) return '';
+    const salvos = new Map((cfg?.filtros || []).map((x) => [x.fonte, x.valores || []]));
+    return `<section class="dc-rd-subsection" data-rd-filtros>
+      <div class="dc-rd-subhead"><b>Filtros</b><small>Importa só as negociações com os valores marcados. Nada marcado = todas.</small></div>
+      <div class="dc-rd-filtros">${filtros.map((filtro) => {
+        const marcados = salvos.get(filtro.fonte) || [];
+        const conhecidos = new Set(filtro.valores.map((v) => v.valor));
+        const valores = [...filtro.valores, ...marcados.filter((v) => !conhecidos.has(v)).map((v) => ({ valor: v, rotulo: `${v} · não encontrado no RD`, negociacoes: 0 }))];
+        return `<details class="dc-rd-filtro" data-rd-filtro-grupo="${esc(filtro.fonte)}"${marcados.length ? ' open' : ''}>
+          <summary><span><b>${esc(filtro.rotulo)}</b><small data-rd-filtro-resumo>${marcados.length ? `${marcados.length} selecionado(s)` : 'Todas'}</small></span><span>${valores.length} opção(ões)</span></summary>
+          <div class="dc-rd-filtro-body">
+            ${valores.length > 8 ? '<input type="search" data-rd-filtro-busca placeholder="Procurar…" aria-label="Procurar valor">' : ''}
+            <div class="dc-rd-filtro-valores">${valores.map((v) => `<label data-busca="${esc(String(v.rotulo).toLowerCase())}"><input type="checkbox" data-rd-filtro data-fonte="${esc(filtro.fonte)}" value="${esc(v.valor)}"${marcados.includes(v.valor) ? ' checked' : ''}${dis}/><span>${esc(v.rotulo)}</span>${v.negociacoes ? `<small title="Negociações na amostra">${v.negociacoes}</small>` : ''}</label>`).join('')}</div>
+          </div>
+        </details>`;
+      }).join('')}</div>
+    </section>`;
+  }
+
+  function catalogoHtml(op) {
+    const c = op?.catalogo;
+    if (!c) return '';
+    const estado = c.erro ? `<span class="dc-rd-catalogo-erro">Última atualização falhou (${esc(c.erro)}); mostrando a anterior.</span>` : c.vencido ? '<span class="dc-rd-catalogo-erro">Desatualizado.</span>' : '';
+    return `<div class="dc-rd-catalogo" data-rd-catalogo>
+      <span><b>Catálogo do RD</b> · atualizado ${esc(c.atualizadoEm ? DC.relTime(c.atualizadoEm) : '—')} · ${(op.funis || []).length} funil(is) · campos e valores das 100 negociações mais recentes de cada funil ${estado}</span>
+      <button type="button" class="dc-btn" data-rd-atualizar-catalogo>Atualizar do RD</button>
+    </div>`;
+  }
+
   function rdFunisHtml(campo, valores, op, dis) {
     const configurados = Array.isArray(valores.funis) ? valores.funis : [];
     const mapaPadrao = valores.mapeamento || {};
     const fontes = [{ valor: 'auto', rotulo: 'Automático' }, { valor: 'ignorar', rotulo: 'Não importar' }, ...(op?.campos || []).map((c) => ({ valor: `${c.entidade}:${c.slug}`, rotulo: `${c.entidade === 'deal' ? 'Negociação' : 'Contato'}: ${c.nome}` }))];
     const funis = op?.funis || [];
     if (op?.erro) return '<div class="dc-ip-full"><small class="dc-muted">Os funis aparecem quando as listas do RD Station carregarem. A seleção salva não foi alterada.</small></div>';
-    if (!funis.length) return '<div class="dc-ip-full"><div class="dc-warn-box">Nenhum funil foi retornado pelo RD Station.</div></div>';
+    if (!funis.length) return `<div class="dc-ip-full">${catalogoHtml(op)}<div class="dc-warn-box">Nenhum funil foi retornado pelo RD Station.</div></div>`;
+    // Backend novo: filtros por valor e origem explícita de cada dado, por funil.
+    const explicito = Boolean(campo.filtrosPorFunil);
 
     const mapaAlterado = (mapa) => (campo.itens || []).filter((it) => {
       const atual = mapa?.[it.chave] ?? 'auto';
       const padrao = mapaPadrao?.[it.chave] ?? 'auto';
       return atual !== padrao;
     }).length;
+
+    const preenchimentoHtml = (funil, mapa) => {
+      if (!explicito || !funil.fontes) {
+        const alterados = mapaAlterado(mapa);
+        return `<details class="dc-rd-subsection dc-rd-map-details">
+            <summary><span><b>Preenchimento dos dados</b><small>${alterados ? `${alterados} diferente(s) do padrão` : 'Usando o preenchimento padrão'}</small></span><span>Editar campos</span></summary>
+            <div class="dc-rd-map-grid">
+              ${(campo.itens || []).map((it) => `<label><span>${esc(it.rotulo)}</span><select data-rd-map data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"${dis}>${opcoesHtml(fontes, mapa?.[it.chave] ?? 'auto', false)}</select></label>`).join('')}
+            </div>
+          </details>`;
+      }
+      const sugeridos = (campo.itens || []).filter((it) => (mapa?.[it.chave] ?? 'auto') === 'auto' && funil.sugestoes?.[it.chave]).length;
+      return `<section class="dc-rd-subsection" data-rd-preenchimento>
+          <div class="dc-rd-subhead"><b>Preenchimento dos dados</b><small>De onde vem cada dado da venda neste funil.${sugeridos ? ` ${sugeridos} origem(ns) sugerida(s) pelo catálogo: revise e salve.` : ''}</small></div>
+          <div class="dc-rd-map-grid">
+            ${(campo.itens || []).map((it) => {
+              const salvo = mapa?.[it.chave] ?? 'auto';
+              const sugestao = funil.sugestoes?.[it.chave] || '';
+              const marca = salvo === 'auto' ? (sugestao ? '<em class="dc-rd-tag">sugerido</em>' : '<em class="dc-rd-tag warn">definir</em>') : '';
+              return `<label><span>${esc(it.rotulo)} ${marca}</span>${origemSelectHtml(funil, salvo, sugestao, dis, `data-rd-map data-rd-map-explicito data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"`)}</label>`;
+            }).join('')}
+          </div>
+        </section>`;
+    };
 
     const funilHtml = (funil) => {
       const cfg = configurados.find((x) => x.pipelineId === funil.id) || null;
@@ -86,29 +167,32 @@
       const mapa = cfg?.mapeamento || mapaPadrao;
       const totalEtapas = (funil.etapas || []).length;
       const resumoEtapas = etapasMarcadas.length ? `${etapasMarcadas.length}/${totalEtapas} etapas` : `Todas as ${totalEtapas} etapas`;
-      const alterados = mapaAlterado(mapa);
+      const nFiltros = (cfg?.filtros || []).filter((x) => x.valores?.length).length;
+      const definidos = (campo.itens || []).filter((it) => (mapa?.[it.chave] ?? 'auto') !== 'auto').length;
+      const sugeridos = (campo.itens || []).filter((it) => (mapa?.[it.chave] ?? 'auto') === 'auto' && funil.sugestoes?.[it.chave]).length;
+      const resumo = explicito
+        ? `${resumoEtapas} · ${nFiltros ? `${nFiltros} filtro(s)` : 'sem filtros'} · ${definidos}/${(campo.itens || []).length} dados com origem salva${sugeridos ? ` · ${sugeridos} sugerida(s) a revisar` : ''}`
+        : `${resumoEtapas} · ${mapaAlterado(mapa) ? `${mapaAlterado(mapa)} campo(s) personalizado(s)` : 'preenchimento padrão'}`;
+      const amostra = funil.amostra ? `<div class="dc-note dc-rd-amostra">Baseado nas ${funil.amostra.negociacoes} negociação(ões) mais recentes deste funil${funil.amostra.contatos ? ` e em ${funil.amostra.contatos} contato(s) ligados a elas` : ''}.${funil.amostra.contatosIndisponiveis ? ' Os contatos não puderam ser lidos agora; campos de contato podem faltar.' : ''}</div>` : '';
       return `<div class="dc-rd-funil${marcado ? ' active' : ''}">
         <div class="dc-rd-funil-row">
           <label class="dc-rd-funil-main">
             <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
-            <span><b>${esc(funil.nome)}</b><small>${marcado ? `${resumoEtapas} · ${alterados ? `${alterados} campo(s) personalizado(s)` : 'preenchimento padrão'}` : `${totalEtapas} etapa(s)`}</small></span>
+            <span><b>${esc(funil.nome)}</b><small>${marcado ? resumo : `${totalEtapas} etapa(s)${funil.amostra ? ` · ${funil.amostra.negociacoes} negociação(ões) na amostra` : ''}`}</small></span>
           </label>
           <button type="button" class="dc-rd-config-btn" data-rd-funil-open="${esc(funil.id)}" aria-expanded="false"${marcado ? '' : ' disabled'}>Configurar</button>
         </div>
         <div class="dc-rd-funil-body" data-rd-funil-body="${esc(funil.id)}" hidden>
+          ${amostra}
           <section class="dc-rd-subsection">
             <div class="dc-rd-subhead"><b>Etapas</b><small>Nenhuma marcada = todas.</small></div>
             <div class="dc-ip-checks dc-rd-stage-grid">
               ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/><span>${esc(etapa.nome)}</span></label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
             </div>
           </section>
+          ${explicito ? filtrosHtml(funil, cfg, dis) : ''}
+          ${preenchimentoHtml(funil, mapa)}
           ${campo.camposLivres ? DCCrmCampos.render(cfg?.camposSelecionados || [], op, dis) : '<p class="dc-muted">A seleção livre de campos estará disponível após atualizar o backend do App.</p>'}
-          <details class="dc-rd-subsection dc-rd-map-details">
-            <summary><span><b>Preenchimento dos dados</b><small>${alterados ? `${alterados} diferente(s) do padrão` : 'Usando o preenchimento padrão'}</small></span><span>Editar campos</span></summary>
-            <div class="dc-rd-map-grid">
-              ${(campo.itens || []).map((it) => `<label><span>${esc(it.rotulo)}</span><select data-rd-map data-pipeline="${esc(funil.id)}" data-sub="${esc(it.chave)}"${dis}>${opcoesHtml(fontes, mapa?.[it.chave] ?? 'auto', false)}</select></label>`).join('')}
-            </div>
-          </details>
         </div>
       </div>`;
     };
@@ -123,7 +207,7 @@
           <div class="dc-rd-group-label"><span>Selecionados</span><small>${selecionados.length} funil(is)</small></div>
           <div class="dc-rd-funnel-list">${selecionados.map(funilHtml).join('')}</div>
         </div>`
-      : `<div class="dc-rd-fallback-note"><b>Todos os funis</b><span>Nenhum funil específico foi marcado. A importação usa o preenchimento padrão em todos.</span></div>`;
+      : `<div class="dc-rd-fallback-note"><b>Todos os funis</b><span>Nenhum funil específico foi marcado: a importação lê todos com a leitura automática. ${explicito ? 'Marque os funis para escolher filtros e a origem de cada dado.' : ''}</span></div>`;
 
     const seletorRestantes = restantes.length
       ? `<details class="dc-rd-more-funnels">
@@ -133,6 +217,7 @@
       : '';
 
     return `<div class="dc-ip-full dc-rd-funnels">
+      ${catalogoHtml(op)}
       <div class="dc-rd-section-head">
         <div><b>${esc(campo.rotulo)}</b><small>${esc(campo.ajuda || '')}</small></div>
         <span class="dc-rd-count">${configurados.length ? `${configurados.length} selecionado(s)` : 'Todos os funis'}</span>
@@ -241,6 +326,11 @@
         (card?.querySelectorAll('[data-rd-map]') || []).forEach((sel) => { mapeamento[sel.dataset.sub] = sel.value; });
         const funil = { pipelineId, etapas, mapeamento };
         if ((f.campos || []).some((c) => c.tipo === 'rd_funis' && c.camposLivres)) funil.camposSelecionados = DCCrmCampos.ler(card);
+        if ((f.campos || []).some((c) => c.tipo === 'rd_funis' && c.filtrosPorFunil)) {
+          const porFonte = new Map();
+          (card?.querySelectorAll('[data-rd-filtro]:checked') || []).forEach((x) => { porFonte.set(x.dataset.fonte, [...(porFonte.get(x.dataset.fonte) || []), x.value]); });
+          funil.filtros = [...porFonte].map(([fonte, valores]) => ({ fonte, valores }));
+        }
         cfg.funis.push(funil);
       });
       // Garante que a configuração nova substitua o formato antigo de um único funil.
@@ -435,6 +525,14 @@
     carregarExtra(ativa);
     void preencherFormularios(ov, i);
     ov.addEventListener('change', (e) => {
+      const filtro = e.target.closest?.('[data-rd-filtro]');
+      if (filtro) {
+        const grupo = filtro.closest('[data-rd-filtro-grupo]');
+        const n = grupo?.querySelectorAll('[data-rd-filtro]:checked').length || 0;
+        const resumo = grupo?.querySelector('[data-rd-filtro-resumo]');
+        if (resumo) resumo.textContent = n ? `${n} selecionado(s)` : 'Todas';
+        return;
+      }
       const toggle = e.target.closest?.('[data-rd-funil-toggle]');
       if (!toggle) return;
       const card = toggle.closest('.dc-rd-funil');
@@ -447,7 +545,20 @@
         if (abrir) { abrir.setAttribute('aria-expanded', 'false'); abrir.textContent = 'Configurar'; }
       }
     });
+    ov.addEventListener('input', (e) => {
+      const busca = e.target.closest?.('[data-rd-filtro-busca]');
+      if (!busca) return;
+      const q = busca.value.trim().toLowerCase();
+      busca.closest('.dc-rd-filtro')?.querySelectorAll('[data-busca]').forEach((l) => { l.hidden = Boolean(q) && !l.dataset.busca.includes(q); });
+    });
     ov.addEventListener('click', async (e) => {
+      const atualizarCatalogo = e.target.closest?.('[data-rd-atualizar-catalogo]');
+      if (atualizarCatalogo) {
+        if (!await DC.modal('Atualizar do RD', '<div class="dc-note">Relê funis, etapas, campos e valores de cada funil no RD (somente leitura). Alterações ainda não salvas neste formulário serão descartadas.</div>', { confirmText: 'Atualizar' })) return;
+        const r = await DC.action(atualizarCatalogo, () => DC.api(`${OPCOES_URL[id]}/atualizar`, { method: 'POST', body: {}, timeout: 60000 }), { success: 'Catálogo do RD atualizado.' });
+        if (r?.ok) { S.opcoes[id] = r.data; await preencherFormularios(ov, i); }
+        return;
+      }
       const recarregar = e.target.closest?.('[data-recarregar-opcoes]');
       if (recarregar) {
         recarregar.disabled = true;
