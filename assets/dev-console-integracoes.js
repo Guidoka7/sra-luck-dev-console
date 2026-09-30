@@ -55,8 +55,10 @@
   /** Importação do RD em etapas: quanto da passada atual já foi lido. */
   const textoPassada = (p) => {
     if (!p) return '';
-    const lidas = Number(p.lidas || 0).toLocaleString('pt-BR');
-    return p.concluida ? ` · leitura completa do RD (${lidas} negociações)` : ` · leitura em etapas: ${lidas} negociações até agora, continua sozinha a cada 5 min`;
+    const lidas = Number(p.lidas || 0);
+    const total = typeof p.total === 'number' && p.total > 0 ? p.total : null;
+    const de = total ? ` de ${total.toLocaleString('pt-BR')} (${Math.min(100, Math.floor((lidas / total) * 100))}%)` : '';
+    return p.concluida ? ` · leitura completa do RD (${lidas.toLocaleString('pt-BR')} negociações)` : ` · passada em andamento: ${lidas.toLocaleString('pt-BR')}${de} negociações lidas até agora, continua sozinha a cada 5 min`;
   };
 
   // ------------------------------------------------------------------ formulário genérico
