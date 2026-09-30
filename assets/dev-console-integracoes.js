@@ -17,7 +17,7 @@
   // Toda função que o catálogo marca como configurável é editável pelo Dev.
   // O backend continua sendo a autoridade: valida esquema, versão e permissões.
   const EDITAVEL_AQUI = null;
-  const OPCOES_URL = { rd_station: '/api/admin/integrations/rd-station/opcoes', conta_azul: '/api/admin/integrations/conta-azul/opcoes' };
+  const OPCOES_URL = { rd_station: '/api/admin/integrations/rd-station/opcoes' };
   const S = { catalogo: null, erro: null, aba: null, opcoes: {} };
 
   async function carregar() {
@@ -453,22 +453,21 @@
   // Conta Azul: leitura da operação.
   const CONFLITO = { baixa_na_conta_azul: 'Baixa na Conta Azul', alterada_na_conta_azul: 'Alterada na Conta Azul', alterada_nos_dois_lados: 'Alterada nos dois lados', baixa_removida_na_conta_azul: 'Baixa removida na Conta Azul', estorno_de_baixa_externa: 'Estorno de baixa externa', recebido_parcial: 'Recebido parcial', ca_cancelado: 'Cancelada na Conta Azul', ca_renegociado: 'Renegociada na Conta Azul', ca_perdido: 'Perdida na Conta Azul', vinculo_divergente: 'Vínculo divergente', nao_localizado: 'Lançamento não localizado', marcador_duplicado: 'Marcador duplicado', parcela_sumiu: 'Excluída na Conta Azul' };
   async function abaContaAzul(alvo) {
-    const [p, conf, fila, hist] = await Promise.all(['painel', 'conflitos', 'fila', 'historico'].map((r) => DC.api(`/api/admin/integrations/conta-azul/${r}`)));
+    const [p, conf, hist] = await Promise.all(['painel', 'conflitos', 'historico'].map((r) => DC.api(`/api/admin/integrations/conta-azul/${r}`)));
     if (!p.ok) { alvo.innerHTML = `<div class="dc-warn-box">${esc(p.error || 'Painel da Conta Azul indisponível.')}</div>`; return; }
-    const d = p.data, c = d.conexao || {}, v = d.vinculos || {}, fl = d.fila || {};
+    const d = p.data, c = d.conexao || {}, v = d.vinculos || {};
     const n = (x) => (x == null ? '—' : x);
-    alvo.innerHTML = `<div class="dc-note">A operação financeira diária continua no Admin. Credenciais, OAuth e parâmetros de sincronização são configurados pelo Dev Console.</div>
+    alvo.innerHTML = `<div class="dc-note">A Conta Azul é a única fonte da confirmação de pagamento: o Sra Luck só lê as baixas de lá e nunca escreve no financeiro da Conta Azul. Vínculos de clientes e parcelas ficam no Admin; credenciais, OAuth e a leitura automática ficam aqui.</div>
       ${!d.estruturaAplicada ? '<div class="dc-warn-box" style="margin-top:8px">Estrutura de sincronização ainda não aplicada no Sra Luck (migration_091).</div>' : ''}
       <div class="dc-ip-kpis" style="margin-top:8px">
         <div><small>OAuth</small><b>${c.autorizada ? 'Conectada' : c.tokenManual ? 'Token manual' : c.clientConfigurado ? 'Aguardando' : 'Sem Client ID'}</b></div>
         <div><small>Vínculos seguros</small><b>${n(v.vinculado)}</b></div>
         <div><small>Conflitos abertos</small><b>${n(d.conflitosAbertos)}</b></div>
-        <div><small>Fila pendente / erro</small><b>${n(fl.pendente)} / ${n(fl.erro)}</b></div>
+        <div><small>Vínculos em revisão</small><b>${n(v.conflito)}</b></div>
       </div>
       <p class="dc-ov-p dc-muted">Última sincronização: ${d.ultimaSincronizacao ? `${esc(quando(d.ultimaSincronizacao.created_at))} · ${esc(d.ultimaSincronizacao.status)}${d.ultimaSincronizacao.erro ? ` — ${esc(d.ultimaSincronizacao.erro)}` : ''}` : 'nunca'} · leitura de alterações até ${esc(quando(d.cursorAlteracoes))} · token ${c.expiraEm ? `renova antes de ${esc(quando(c.expiraEm))}` : '—'}</p>
-      <h3 class="dc-nc-h">Conflitos em revisão</h3><div class="dc-ip-list">${(conf.data?.itens || []).map((x) => `<div class="dc-ip-row"><b>${esc(CONFLITO[x.tipo] || x.tipo)}</b><span>${esc(x.descricao)}${x.dados_sra?.valor != null || x.dados_externos?.valorBruto != null ? `<small class="dc-mono">Sra Luck ${esc(x.dados_sra?.valor ?? '—')} · ${esc(x.dados_sra?.vencimento ?? '—')} · ${esc(x.dados_sra?.status ?? '—')} | Conta Azul ${esc(x.dados_externos?.valorBruto ?? '—')} · ${esc(x.dados_externos?.vencimento ?? '—')} · ${esc(x.dados_externos?.status ?? '—')}</small>` : ''}</span><small>${esc(quando(x.created_at))}</small></div>`).join('') || '<div class="dc-empty">Nenhum conflito aberto.</div>'}</div>
-      <h3 class="dc-nc-h">Fila</h3><div class="dc-ip-list">${(fila.data?.itens || []).slice(0, 30).map((o) => `<div class="dc-ip-row"><b>${esc(String(o.operacao).replace(/_/g, ' '))}</b><span>${o.tentativas}/${o.max_tentativas} tentativa(s) · ${o.estado === 'pendente' ? `próxima ${esc(quando(o.proxima_tentativa_em))}` : esc(quando(o.concluida_em || o.created_at))}${o.ultimo_erro ? `<small>${esc(o.ultimo_erro)}</small>` : ''}</span>${DC.chip(o.estado, o.estado === 'concluida' ? 'ok' : o.estado === 'erro' ? 'bad' : o.estado === 'pendente' ? 'warn' : 'neutral')}</div>`).join('') || '<div class="dc-empty">Fila vazia.</div>'}</div>
-      <h3 class="dc-nc-h">Execuções</h3><div class="dc-ip-list">${(hist.data?.itens || []).slice(0, 20).map((e) => `<div class="dc-ip-row"><b>${esc(String(e.event_type).replace(/_/g, ' '))}</b><span>${esc(quando(e.created_at))}${e.erro ? `<small>${esc(e.erro)}</small>` : e.payload?.leitura ? `<small>${e.payload.leitura.eventos} evento(s) · ${e.payload.leitura.baixasAplicadas} baixa(s) aplicada(s) · ${e.payload.leitura.conflitos} conflito(s) · ${e.payload.envio?.enfileiradas ?? 0} envio(s)</small>` : ''}</span>${DC.chip(e.status, e.status === 'processado' ? 'ok' : e.status === 'erro' ? 'bad' : 'warn')}</div>`).join('') || '<div class="dc-empty">Nenhuma execução registrada.</div>'}</div>`;
+      <h3 class="dc-nc-h">Em revisão</h3><div class="dc-ip-list">${(conf.data?.itens || []).map((x) => `<div class="dc-ip-row"><b>${esc(CONFLITO[x.tipo] || x.tipo)}</b><span>${esc(x.descricao)}${x.dados_sra?.valor != null || x.dados_externos?.valorBruto != null ? `<small class="dc-mono">Sra Luck ${esc(x.dados_sra?.valor ?? '—')} · ${esc(x.dados_sra?.vencimento ?? '—')} · ${esc(x.dados_sra?.status ?? '—')} | Conta Azul ${esc(x.dados_externos?.valorBruto ?? '—')} · ${esc(x.dados_externos?.vencimento ?? '—')} · ${esc(x.dados_externos?.status ?? '—')}</small>` : ''}</span><small>${esc(quando(x.created_at))}</small></div>`).join('') || '<div class="dc-empty">Nenhum conflito aberto.</div>'}</div>
+      <h3 class="dc-nc-h">Execuções</h3><div class="dc-ip-list">${(hist.data?.itens || []).slice(0, 20).map((e) => `<div class="dc-ip-row"><b>${esc(String(e.event_type).replace(/_/g, ' '))}</b><span>${esc(quando(e.created_at))}${e.erro ? `<small>${esc(e.erro)}</small>` : e.payload?.leitura ? `<small>${e.payload.leitura.eventos} evento(s) lido(s) · ${e.payload.leitura.baixasAplicadas} pagamento(s) confirmado(s) aplicado(s) · ${e.payload.leitura.conflitos} em revisão</small>` : ''}</span>${DC.chip(e.status, e.status === 'processado' ? 'ok' : e.status === 'erro' ? 'bad' : 'warn')}</div>`).join('') || '<div class="dc-empty">Nenhuma execução registrada.</div>'}</div>`;
   }
 
   async function abaRdOperacao(alvo) {
@@ -594,7 +593,7 @@
   // Conta Azul: central técnica (configuração, OAuth, saúde, webhooks e logs). Nada financeiro aqui:
   // vínculo de clientes e parcelas é feito pela equipe no Admin. O backend nunca devolve segredo.
   const TOKEN_ESTADO = { valido: ['Token válido', 'ok'], expirado: ['Token expirado', 'warn'], ausente: ['Sem token', 'bad'], sem_validade: ['Token sem validade', 'warn'] };
-  const EVENTO_CA = { token_renovado: 'Token renovado', token_falhou: 'Falha ao renovar token', conexao_testada: 'Conexão testada', desconectado: 'Desconectado', sync_manual: 'Sincronização manual', sync_agendada: 'Sincronização agendada', oauth_conectado: 'OAuth conectado', oauth_falhou: 'Falha no OAuth', diagnostico_api: 'Diagnóstico da API' };
+  const EVENTO_CA = { token_renovado: 'Token renovado', token_falhou: 'Falha ao renovar token', conexao_testada: 'Conexão testada', desconectado: 'Desconectado', sync_manual: 'Leitura manual das baixas', sync_agendada: 'Leitura automática das baixas', oauth_conectado: 'OAuth conectado', oauth_falhou: 'Falha no OAuth', diagnostico_api: 'Diagnóstico da API' };
   const CAMPOS_APP_CA = [
     ['client_id', 'Client ID', 'text', 'Do App de Desenvolvimento (Portal do Desenvolvedor)'],
     ['client_secret', 'Client Secret', 'password', 'Nunca é exibido de volta; só a máscara'],
@@ -653,7 +652,7 @@
       </div>
       <div class="dc-note" style="margin-top:8px"><b>App de Desenvolvimento:</b> a Conta Azul devolve o login para a Redirect URI do app (ex.: https://contaazul.com), fora do Sra Luck. Depois de <b>Conectar</b> e entrar com o usuário do ERP de teste, copie o endereço completo da barra do navegador (tem <span class="dc-mono">?code=…&state=…</span>) e cole abaixo em até 3 minutos.</div>
       <div style="display:flex;gap:8px;margin-top:6px"><input class="dc-input grow" type="password" autocomplete="off" spellcheck="false" data-ca-retorno placeholder="https://contaazul.com/?code=…&state=… (ou www.contaazul.com)"><button class="dc-btn primary" data-ca="concluir">Concluir conexão</button></div>
-      <p class="dc-ov-p dc-muted">A sincronização manual executa a mesma rodada do agendador (regras automáticas seguras).</p>
+      <p class="dc-ov-p dc-muted">Sincronização manual = a mesma leitura do agendador: /alteracoes desde o cursor → parcelas vinculadas → pagamento confirmado aplicado no Sra Luck (uma vez por baixa).</p>
       <h3 class="dc-nc-h">Diagnóstico da API (Fase 1, só leitura)</h3>
       <div class="dc-note">Chamadas reais na conta conectada: empresa, pessoa pelo CPF, pessoa pelo ID, receitas da pessoa, estrutura de uma parcela e alterações das últimas 24 h. Registra só a estrutura das respostas e valores não pessoais (status, datas, valores, versão) — sem nome, documento ou e-mail.</div>
       <div style="display:flex;gap:8px;margin-top:6px"><input class="dc-input" style="width:220px" data-ca-cpf placeholder="CPF de uma pessoa de teste"><button class="dc-btn" data-ca="diagnostico"${s.conectado ? '' : ' disabled'}>Rodar diagnóstico</button></div>
@@ -665,8 +664,8 @@
         ${linha('API Base URL', `<span class="dc-mono">${esc(s.urls?.apiBaseUrl)}</span>`)}
         ${linha('Redirect / Callback', `<span class="dc-mono">${esc(s.urls?.callback)}</span>`, 'Cadastre exatamente este endereço no App da Conta Azul (Portal do Desenvolvedor).')}
       </div>
-      <h3 class="dc-nc-h">Webhooks</h3>
-      <div class="dc-ip-list">${linha('Situação', DC.chip('API não oferece', 'neutral'), esc(s.webhooks?.motivo))}${linha('Contingência ativa', esc(s.webhooks?.contingencia))}</div>
+      <h3 class="dc-nc-h">Como as baixas chegam</h3>
+      <div class="dc-ip-list">${linha('Leitura periódica', esc(s.webhooks?.contingencia))}${linha('Aviso imediato da Conta Azul', DC.chip('API não oferece', 'neutral'), esc(s.webhooks?.motivo))}${linha('Escrita na Conta Azul', DC.chip('Desligada', 'ok'), 'O Sra Luck não envia baixa, pagamento, estorno nem lançamento. Só revoga a própria conexão (Desconectar).')}</div>
       <h3 class="dc-nc-h">Comprovantes como anexo</h3>
       <div class="dc-ip-list">${linha('Situação', DC.chip('API não permite', 'neutral'), esc(s.anexos?.motivo))}</div>
       <h3 class="dc-nc-h">Logs técnicos</h3>
