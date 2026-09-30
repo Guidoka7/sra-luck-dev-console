@@ -420,6 +420,21 @@
   const RESULTADO = { criada: ['Aguardando cadastro', 'ok'], atualizada: ['Snapshot atualizado', 'neutral'], duplicada: ['Duplicada', 'warn'], cliente_existente: ['Cliente já existe', 'warn'], ignorada: ['Ignorada', 'neutral'], erro: ['Erro', 'bad'], importada_apos_revisao: ['Importada após revisão', 'info'] };
   const itemHtml = (it) => `<div class="dc-ip-row"><b>${esc(it.dados?.nome || it.externalId)}</b><span>${esc([it.dados?.cpf, it.dados?.telefone, it.dados?.email].filter(Boolean).join(' · ') || 'Sem contato')}${it.motivo ? `<small>${esc(it.motivo)}</small>` : ''}${(it.correspondencias || []).map((c) => `<small>↳ ${c.tipo === 'cliente' ? 'Cliente' : 'Venda pendente'} ${esc(c.nome || c.id)} (mesmo ${esc(c.por.join(', '))})</small>`).join('')}</span>${DC.chip(...(RESULTADO[it.resultado] || [it.resultado, 'neutral']))}</div>`;
 
+  // Fonte e campanha das vendas do RD: achadas, só o canal registrado, sem registro, e a busca em outros cadastros.
+  function coberturaOrigensHtml(c) {
+    if (!c) return '';
+    const s = c.porSituacao || {}, r = c.ultimaRodada || null;
+    const sem = (s.sem_registro_no_rd || 0) + (s.sem_contato || 0);
+    return `<h3 class="dc-nc-h">Origem das clientes (fonte e campanha)</h3>
+      <div class="dc-ip-kpis">
+        <div><small>Fonte e campanha no RD</small><b>${s.encontrada || 0} / ${c.total || 0}</b></div>
+        <div><small>Só o canal registrado</small><b>${s.parcial || 0}</b></div>
+        <div><small>Sem registro no RD</small><b>${sem}</b></div>
+        <div><small>Busca em outros cadastros</small><b>${c.buscaAmpliadaFeita || 0} feitas · ${c.buscaAmpliadaPendente || 0} na fila</b></div>
+      </div>
+      <p class="dc-ov-p dc-muted">Sem registro, o Admin mostra o que o RD tem (ex.: “Orgânico — sem campanha paga”, “Não registrada no RD”), nunca um dado inventado.${c.colunasEmBranco ? ` ${c.colunasEmBranco} venda(s) ainda com a coluna em branco (preenchidas na próxima passada).` : ''}${r?.em ? ` Última rodada da busca por e-mail/telefone: ${esc(quando(r.em))} · ${r.analisadas || 0} analisada(s) · ${r.comOutrosContatos || 0} com outro cadastro · ${r.melhoradas || 0} completada(s).` : ''}${r?.erro ? ` ${esc(r.erro)}` : ''}</p>`;
+  }
+
   async function abaCrm(alvo) {
     const [imps, rev] = await Promise.all([DC.api('/api/admin/integrations/rd-station/importacoes'), DC.api('/api/admin/integrations/rd-station/importacoes/revisao')]);
     if (!imps.ok) { alvo.innerHTML = `<div class="dc-warn-box">${esc(imps.error || 'Histórico indisponível.')}</div>`; return; }
@@ -428,6 +443,7 @@
       <div style="display:flex;justify-content:flex-end;margin:8px 0">${podeConfigurar() ? '<button class="dc-btn primary" data-importar>Importar agora</button>' : '<small class="dc-muted">Importar agora: owner/developer.</small>'}</div>
       ${!imps.data.disponivel ? '<div class="dc-warn-box">Estrutura de histórico ainda não aplicada no Sra Luck (migration_091).</div>' : ''}
       ${revisao.length ? `<h3 class="dc-nc-h">Aguardando revisão no Admin (${revisao.length})</h3><div class="dc-ip-list">${revisao.map(itemHtml).join('')}</div>` : ''}
+      ${coberturaOrigensHtml(imps.data.origens)}
       <h3 class="dc-nc-h">Histórico de importações</h3>
       <div class="dc-ip-list">${lista.map((i) => `<button type="button" class="dc-ip-row dc-ip-click" data-imp="${esc(i.id)}"><b>${esc(quando(i.iniciado_em))}</b><span>${esc(i.origem)} · ${i.totais?.totalRd ?? 0} lida(s) · ${i.totais?.criadas ?? 0} nova(s) · ${(i.totais?.duplicadas ?? 0) + (i.totais?.clienteExistente ?? 0)} duplicidade(s)${esc(textoPassada(i.totais?.passada))}${i.erro ? `<small>${esc(i.erro)}</small>` : ''}${i.filtro ? `<small class="dc-mono">${esc(i.filtro)}</small>` : ''}</span>${DC.chip(i.status, i.status === 'concluida' ? 'ok' : i.status === 'erro' ? 'bad' : 'warn')}</button><div data-itens="${esc(i.id)}" hidden></div>`).join('') || '<div class="dc-empty">Nenhuma importação registrada.</div>'}</div>`;
   }
