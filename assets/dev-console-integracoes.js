@@ -591,7 +591,76 @@
     });
   }
 
-  const EXTRAS = { rd_station: [['operacao', 'Monitoramento', abaRdOperacao], ['origens', 'Funis e origem', abaOrigens], ['importacoes', 'Importações', abaCrm]], conta_azul: [['operacao', 'Operação', abaContaAzul]] };
+  // Conta Azul: central técnica (configuração, OAuth, saúde, webhooks e logs). Nada financeiro aqui:
+  // vínculo de clientes e parcelas é feito pela equipe no Admin. O backend nunca devolve segredo.
+  const TOKEN_ESTADO = { valido: ['Token válido', 'ok'], expirado: ['Token expirado', 'warn'], ausente: ['Sem token', 'bad'], sem_validade: ['Token sem validade', 'warn'] };
+  const EVENTO_CA = { token_renovado: 'Token renovado', token_falhou: 'Falha ao renovar token', conexao_testada: 'Conexão testada', desconectado: 'Desconectado', sync_manual: 'Sincronização manual', sync_agendada: 'Sincronização agendada' };
+  async function abaCentralContaAzul(alvo) {
+    const r = await DC.api('/api/admin/integrations/conta-azul/central/status');
+    if (!r.ok) { alvo.innerHTML = `<div class="dc-warn-box">${esc(r.status === 404 ? 'A central técnica ainda não está publicada neste Sra Luck (branch claude/conta-azul-parcela-unica).' : (r.data?.erro || r.error || 'Central indisponível.'))}</div>`; return; }
+    const s = r.data, t = s.token || {};
+    const [tokTxt, tokTom] = TOKEN_ESTADO[t.estado] || [t.estado || '—', 'neutral'];
+    const linha = (rotulo, valor, detalhe) => `<div class="dc-ip-row"><b>${esc(rotulo)}</b><span>${valor}${detalhe ? `<small>${detalhe}</small>` : ''}</span></div>`;
+    const ultimoSync = s.ultimaSincronizacao;
+    alvo.innerHTML = `
+      <div class="dc-note">Central técnica da Conta Azul: configuração, OAuth, saúde, webhooks e logs. <b>Operação financeira das clientes não é feita aqui</b> (vínculo por CPF, parcelas e importação ficam no Admin do Sra Luck). Client Secret e tokens ficam só no cofre cifrado do backend; esta tela recebe apenas estados.</div>
+      ${s.ambiente === 'producao' ? '<div class="dc-critical-box" style="margin-top:8px"><b>Ambiente: PRODUÇÃO.</b> A conta conectada é a conta real.</div>' : '<div class="dc-warn-box" style="margin-top:8px"><b>Ambiente: TESTE.</b> Use a conta ERP do App de Desenvolvimento da Conta Azul (dados fictícios, 30 dias).</div>'}
+      <div class="dc-ip-kpis" style="margin-top:8px">
+        <div><small>Configuração</small><b>${s.configurado ? 'Configurado' : 'Não configurado'}</b></div>
+        <div><small>Conexão OAuth</small><b>${s.conectado ? 'Conectado' : 'Desconectado'}</b></div>
+        <div><small>Token</small><b>${DC.chip(tokTxt, tokTom)}</b></div>
+        <div><small>Empresa conectada</small><b>${esc(s.empresa?.nome || '—')}</b></div>
+      </div>
+      <h3 class="dc-nc-h">Saúde</h3>
+      <div class="dc-ip-list">
+        ${linha('Renovação automática', t.renovacaoAutomatica ? 'Ligada (refresh token no cofre; renova 2 min antes de expirar, com trava)' : 'Desligada — conecte pelo OAuth')}
+        ${linha('Token expira em', esc(quando(t.expiraEm)))}
+        ${linha('Última renovação', esc(quando(t.ultimaRenovacao)), t.ultimaFalha ? `Falha ${esc(quando(t.ultimaFalha.em))}: ${esc(t.ultimaFalha.erro || t.ultimaFalha.codigo || '')}` : '')}
+        ${linha('Empresa conectada', esc(s.empresa ? `${s.empresa.nome}${s.empresa.documento ? ` · ${s.empresa.documento}` : ''}` : 'Ainda não verificada — use Testar conexão'), s.empresa ? `verificada ${esc(quando(s.empresa.verificadaEm))}` : '')}
+        ${linha('Última sincronização', ultimoSync ? `${esc(quando(ultimoSync.created_at))} · ${esc(ultimoSync.status)}` : 'nunca', ultimoSync?.erro ? esc(ultimoSync.erro) : '')}
+        ${linha('Último erro', s.ultimoErro ? `${esc(EVENTO_CA[s.ultimoErro.event_type] || s.ultimoErro.event_type)} · ${esc(quando(s.ultimoErro.created_at))}` : 'nenhum', s.ultimoErro?.erro ? esc(s.ultimoErro.erro) : '')}
+      </div>
+      <h3 class="dc-nc-h">Ações</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="dc-btn primary" data-ca="conectar">${s.conectado ? 'Reautorizar' : 'Conectar'} (OAuth)</button>
+        <button class="dc-btn" data-ca="testar"${s.conectado ? '' : ' disabled'}>Testar conexão</button>
+        <button class="dc-btn" data-ca="renovar"${s.conectado ? '' : ' disabled'}>Renovar token agora</button>
+        <button class="dc-btn" data-ca="sincronizar"${s.conectado ? '' : ' disabled'}>Sincronização manual</button>
+        <button class="dc-btn danger" data-ca="desconectar"${s.conectado ? '' : ' disabled'}>Desconectar</button>
+      </div>
+      <p class="dc-ov-p dc-muted">Salvar configuração: credenciais na aba Visão (Client ID, Client Secret, Redirect URI) e ambiente/URLs em Funções › Conexão. A sincronização manual executa a mesma rodada do agendador (regras automáticas seguras).</p>
+      <h3 class="dc-nc-h">Endereços (${esc(s.ambiente === 'producao' ? 'produção' : 'teste')})</h3>
+      <div class="dc-ip-list">
+        ${linha('Authorization URL', `<span class="dc-mono">${esc(s.urls?.authorizeUrl)}</span>`)}
+        ${linha('Token URL', `<span class="dc-mono">${esc(s.urls?.tokenUrl)}</span>`)}
+        ${linha('API Base URL', `<span class="dc-mono">${esc(s.urls?.apiBaseUrl)}</span>`)}
+        ${linha('Redirect / Callback', `<span class="dc-mono">${esc(s.urls?.callback)}</span>`, 'Cadastre exatamente este endereço no App da Conta Azul (Portal do Desenvolvedor).')}
+      </div>
+      <h3 class="dc-nc-h">Webhooks</h3>
+      <div class="dc-ip-list">${linha('Situação', DC.chip('API não oferece', 'neutral'), esc(s.webhooks?.motivo))}${linha('Contingência ativa', esc(s.webhooks?.contingencia))}</div>
+      <h3 class="dc-nc-h">Comprovantes como anexo</h3>
+      <div class="dc-ip-list">${linha('Situação', DC.chip('API não permite', 'neutral'), esc(s.anexos?.motivo))}</div>
+      <h3 class="dc-nc-h">Logs técnicos</h3>
+      <div class="dc-ip-list">${(s.eventos || []).map((e) => `<div class="dc-ip-row"><b>${esc(EVENTO_CA[e.tipo] || e.tipo)}</b><span>${esc(quando(e.em))}${e.resumo ? ` · ${esc(e.resumo)}` : ''}${e.erro ? `<small>${esc(e.erro)}</small>` : ''}</span>${DC.chip(e.status, e.status === 'erro' ? 'bad' : 'ok')}</div>`).join('') || '<div class="dc-empty">Sem eventos técnicos ainda.</div>'}</div>`;
+    alvo.addEventListener('click', async (ev) => {
+      const b = ev.target.closest?.('[data-ca]');
+      if (!b || b.disabled) return;
+      const acao = b.dataset.ca;
+      const recarregar = () => abaCentralContaAzul(alvo);
+      if (acao === 'conectar') return window.DCIntegrationEditor?.oauthProvider('conta_azul', b);
+      if (acao === 'testar') { const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/central/testar-conexao', { method: 'POST', body: {}, timeout: 30000 })); if (x?.ok) DC.toast(`Conexão OK: ${x.data.empresa?.nome || 'empresa'} (${x.data.latenciaMs} ms).`); return recarregar(); }
+      if (acao === 'renovar') { const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/central/renovar-token', { method: 'POST', body: {}, timeout: 30000 }), { success: 'Token renovado; o refresh token novo foi guardado no cofre.' }); return x && recarregar(); }
+      if (acao === 'sincronizar') { const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/sincronizar', { method: 'POST', body: {}, timeout: 60000 })); if (x?.ok) DC.toast(x.data.executada === false ? `Não executada: ${x.data.motivo}` : `Sincronização ${x.data.status}${x.data.erro ? `: ${x.data.erro}` : ''}.`, x.data.status === 'erro'); return recarregar(); }
+      if (acao === 'desconectar') {
+        if (!await DC.modal('Desconectar Conta Azul', '<div class="dc-critical-box">Revoga o acesso na Conta Azul (DELETE /oauth/connections/{id_empresa}) e apaga os tokens do cofre. A sincronização para até uma nova autorização. Parcelas, vínculos e histórico continuam no Sra Luck.</div>', { confirmText: 'Desconectar', danger: true })) return;
+        const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/central/desconectar', { method: 'POST', body: {}, timeout: 30000 }));
+        if (x?.ok) DC.toast(x.data.revogadaNaContaAzul ? 'Acesso revogado na Conta Azul e tokens removidos.' : `Tokens removidos. A revogação na Conta Azul não foi confirmada: ${x.data.motivo || ''}`, !x.data.revogadaNaContaAzul);
+        return recarregar();
+      }
+    });
+  }
+
+  const EXTRAS = { rd_station: [['operacao', 'Monitoramento', abaRdOperacao], ['origens', 'Funis e origem', abaOrigens], ['importacoes', 'Importações', abaCrm]], conta_azul: [['central', 'Central', abaCentralContaAzul], ['operacao', 'Operação', abaContaAzul]] };
 
   // ------------------------------------------------------------------ drawer
 
