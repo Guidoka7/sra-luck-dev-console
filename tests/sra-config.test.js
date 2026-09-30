@@ -69,3 +69,21 @@ test('Engenharia: time do Sra Luck usa SRA_VERCEL_TEAM_ID e, sem ele, o time do 
   assert.equal(await teamFor('sra'), 'team_app');
   assert.equal(await teamFor('console'), 'team_console');
 });
+
+test('Preview com SRA_LUCK_PREVIEW_BASE_URL aponta só para o Sra Luck de teste; produção segue o cofre', async () => {
+  valores = { SRA_LUCK_BASE_URL: 'https://sraluckapp.vercel.app', SRA_LUCK_SERVICE_TOKEN: 'p'.repeat(40) };
+  const antes = { env: process.env.VERCEL_ENV, base: process.env.SRA_LUCK_PREVIEW_BASE_URL, tok: process.env.SRA_LUCK_PREVIEW_SERVICE_TOKEN };
+  try {
+    process.env.SRA_LUCK_PREVIEW_BASE_URL = 'https://sraluckapp-git-teste.vercel.app';
+    process.env.SRA_LUCK_PREVIEW_SERVICE_TOKEN = 't'.repeat(40);
+    process.env.VERCEL_ENV = 'production';
+    assert.equal((await sraConnection()).base, 'https://sraluckapp.vercel.app');
+    process.env.VERCEL_ENV = 'preview';
+    const conn = await sraConnection();
+    assert.equal(conn.base, 'https://sraluckapp-git-teste.vercel.app');
+    assert.equal(conn.token, 't'.repeat(40));
+    assert.equal(conn.alvo, 'preview');
+  } finally {
+    for (const [k, v] of [['VERCEL_ENV', antes.env], ['SRA_LUCK_PREVIEW_BASE_URL', antes.base], ['SRA_LUCK_PREVIEW_SERVICE_TOKEN', antes.tok]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});
