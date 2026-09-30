@@ -205,7 +205,7 @@
         <div class="dc-rd-funil-row">
           <label class="dc-rd-funil-main">
             <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
-            <span><b>${esc(funil.nome)}</b><small>${totalNoRd(funil)}${contagemDe(op, funil.id) ? `${esc(statusTexto(contagemDe(op, funil.id)))} · ` : ''}${marcado ? resumo : `${totalEtapas} etapa(s)`}</small></span>
+            <span><b>${esc(funil.nome)}</b><small>${totalNoRd(funil)}${contagemDe(op, funil.id) ? `${esc(statusTexto(contagemDe(op, funil.id)))} · ` : ''}${op?.origens?.porFunil?.[funil.id] ? `fonte e campanha: ${n(op.origens.porFunil[funil.id].porSituacao?.encontrada)}/${n(op.origens.porFunil[funil.id].clientes)} clientes · ` : ''}${marcado ? resumo : `${totalEtapas} etapa(s)`}</small></span>
           </label>
           <button type="button" class="dc-rd-config-btn" data-rd-funil-open="${esc(funil.id)}" aria-expanded="false"${marcado ? '' : ' disabled'}>Configurar</button>
         </div>
@@ -530,7 +530,66 @@
       <div class="dc-ip-list">${eventos.map((e) => `<div class="dc-ip-row"><b>${esc(String(e.acao || e.event_type || 'evento').replace(/_/g, ' '))}</b><span>${esc(e.detalhes?.detalhe || e.detalhes?.erro || e.erro || '')}</span><small>${esc(quando(e.created_at))}</small></div>`).join('') || '<div class="dc-empty">Sem eventos recentes do RD Station.</div>'}</div>`;
   }
 
-  const EXTRAS = { rd_station: [['operacao', 'Monitoramento', abaRdOperacao], ['importacoes', 'Importações', abaCrm]], conta_azul: [['operacao', 'Operação', abaContaAzul]] };
+  // Os 15 funis do RD: quantidade exata, e fonte/campanha de cada cliente (espelho do Sra Luck).
+  const SITUACAO_ORIGEM = { encontrada: ['Fonte e campanha', 'ok'], parcial: ['Só o canal', 'warn'], sem_registro_no_rd: ['Sem registro no RD', 'bad'], sem_contato: ['Sem contato', 'bad'] };
+  const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+  function funisSelecionados() {
+    const f = integracao('rd_station')?.funcoes?.find((x) => x.id === 'importacao');
+    return new Set((f?.config?.funis || []).map((x) => x.pipelineId));
+  }
+  function listaOrigensHtml(d, funilId, situacao) {
+    if (!d?.disponivel) return '<div class="dc-warn-box">Lista indisponível (migration_122 ainda não aplicada no Sra Luck).</div>';
+    const paginas = Math.max(1, Math.ceil((d.total || 0) / (d.tamanho || 50)));
+    const prova = (p) => `${esc(p.rotulo)}: <b>${esc(p.valor)}</b> — ${p.propria ? 'nesta negociação' : `negociação${p.funil ? ` do funil ${esc(p.funil)}` : ''}`}${p.criadaEm ? ` de ${esc(DC.dateFmt ? DC.dateFmt.format(new Date(p.criadaEm)) : String(p.criadaEm).slice(0, 10))}` : ''}${p.outroContato ? ` (outro cadastro com o mesmo ${p.outroContato === 'email' ? 'e-mail' : 'telefone'})` : ''}`;
+    return `<div class="dc-ip-list">${(d.itens || []).map((it) => `<div class="dc-ip-row"><b>${esc(it.cliente || 'Sem nome no RD')}</b><span>Fonte: ${esc(it.fonte || '—')} · Campanha: ${esc(it.campanha || '—')}${(it.provas || []).map((p) => `<small>${prova(p)}</small>`).join('')}</span>${DC.chip(...(SITUACAO_ORIGEM[it.situacao] || [it.situacao || 'Aguardando', 'neutral']))}</div>`).join('') || '<div class="dc-empty">Nenhuma negociação nesta seleção.</div>'}</div>
+      <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin:6px 0">
+        <small class="dc-muted">${n(d.total)} negociação(ões) · página ${d.pagina} de ${paginas}</small>
+        <button type="button" class="dc-btn" data-origem-pagina="${d.pagina - 1}" data-funil="${esc(funilId)}" data-situacao="${esc(situacao || '')}"${d.pagina <= 1 ? ' disabled' : ''}>Anterior</button>
+        <button type="button" class="dc-btn" data-origem-pagina="${d.pagina + 1}" data-funil="${esc(funilId)}" data-situacao="${esc(situacao || '')}"${d.pagina >= paginas ? ' disabled' : ''}>Próxima</button>
+      </div>`;
+  }
+  async function abaOrigens(alvo) {
+    const op = await opcoesDe('rd_station');
+    if (!op || op.erro) { alvo.innerHTML = `<div class="dc-warn-box">${esc(op?.erro || 'Catálogo do RD indisponível.')}</div>`; return; }
+    const sel = funisSelecionados();
+    const cob = op.origens?.porFunil || {};
+    const esp = op.espelho || null;
+    const funis = (op.funis || []).slice().sort((a, b) => (b.total?.negociacoes || 0) - (a.total?.negociacoes || 0));
+    const tot = funis.reduce((acc, f) => { const c = cob[f.id]; acc.neg += f.total?.negociacoes || 0; if (c) { acc.cli += c.clientes; acc.fc += c.porSituacao?.encontrada || 0; } return acc; }, { neg: 0, cli: 0, fc: 0 });
+    const top = (lista) => (lista || []).slice(0, 8).map((x) => `<li><span>${esc(x.valor)}</span><b>${n(x.clientes)}</b></li>`).join('');
+    alvo.innerHTML = `<div class="dc-note">Todos os ${funis.length} funis do RD, com a quantidade exata de negociações e a <b>fonte e campanha de cada cliente</b>. A origem é procurada na negociação, nas outras negociações da cliente em qualquer funil e em outros cadastros dela no RD com o mesmo e-mail ou telefone. Sem registro em lugar nenhum, aparece “Não registrada no RD”: nada é inventado.<br/><b>A sincronização com o Admin continua só com os funis marcados</b> em Importação (${sel.size} marcado(s)); os demais só aparecem aqui.</div>
+      <div class="dc-ip-kpis" style="margin-top:8px">
+        <div><small>Negociações no RD</small><b>${n(tot.neg)}</b></div>
+        <div><small>Clientes (pessoas)</small><b>${n(tot.cli)}</b></div>
+        <div><small>Com fonte e campanha</small><b>${n(tot.fc)} (${pct(tot.fc, tot.cli)})</b></div>
+        <div><small>Espelho do RD</small><b>${esp?.concluidoEm ? esc(DC.relTime(esp.concluidoEm)) : 'lendo…'}</b></div>
+      </div>
+      ${!Object.keys(cob).length ? '<div class="dc-warn-box" style="margin-top:8px">A primeira leitura completa do RD (negociações e contatos) ainda está em andamento; a origem por funil aparece ao terminar (a cada 6 h ela se atualiza sozinha).</div>' : ''}
+      ${esp?.erro ? `<div class="dc-warn-box" style="margin-top:8px">${esc(esp.erro)}</div>` : ''}
+      <div class="dc-ip-list" style="margin-top:8px">${funis.map((f) => {
+        const c = cob[f.id];
+        const s = c?.porSituacao || {};
+        return `<details class="dc-rd-contagem" data-origem-funil="${esc(f.id)}"><summary><b>${esc(f.nome)}</b>${sel.has(f.id) ? ' ' + DC.chip('Sincroniza com o Admin', 'ok') : ''} · ${n(f.total?.negociacoes)} negociação(ões)${c ? ` · ${n(c.clientes)} cliente(s) · <b>${n(s.encontrada)} (${pct(s.encontrada || 0, c.clientes)}) com fonte e campanha</b> · ${n(s.parcial)} só o canal · ${n((s.sem_registro_no_rd || 0) + (s.sem_contato || 0))} sem registro` : ''}</summary>
+          ${c ? `<div class="dc-rd-contagem-grid"><div><b>Fontes</b><ul>${top(c.fontes)}</ul></div><div><b>Campanhas</b><ul>${top(c.campanhas)}</ul></div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0">${[['', 'Todas'], ['encontrada', 'Fonte e campanha'], ['parcial', 'Só o canal'], ['sem_registro_no_rd', 'Sem registro']].map(([k, l]) => `<button type="button" class="dc-btn" data-origem-pagina="1" data-funil="${esc(f.id)}" data-situacao="${k}">${l}</button>`).join('')}</div>
+          <div data-origem-lista="${esc(f.id)}"><small class="dc-muted">Escolha acima para ver as clientes deste funil.</small></div>` : '<small class="dc-muted">Aguardando a leitura completa deste funil.</small>'}
+        </details>`;
+      }).join('')}</div>`;
+    alvo.addEventListener('click', async (e) => {
+      const b = e.target.closest?.('[data-origem-pagina]');
+      if (!b || b.disabled) return;
+      const funil = b.dataset.funil, situacao = b.dataset.situacao || '';
+      const lista = alvo.querySelector(`[data-origem-lista="${CSS.escape(funil)}"]`);
+      if (!lista) return;
+      lista.innerHTML = '<div class="dc-muted">Carregando…</div>';
+      const q = new URLSearchParams({ funil, pagina: b.dataset.origemPagina });
+      if (situacao) q.set('situacao', situacao);
+      const r = await DC.api(`/api/admin/integrations/rd-station/origens/negociacoes?${q}`);
+      lista.innerHTML = r.ok ? listaOrigensHtml(r.data, funil, situacao) : `<div class="dc-warn-box">${esc(r.error || 'Falha ao carregar.')}</div>`;
+    });
+  }
+
+  const EXTRAS = { rd_station: [['operacao', 'Monitoramento', abaRdOperacao], ['origens', 'Funis e origem', abaOrigens], ['importacoes', 'Importações', abaCrm]], conta_azul: [['operacao', 'Operação', abaContaAzul]] };
 
   // ------------------------------------------------------------------ drawer
 
