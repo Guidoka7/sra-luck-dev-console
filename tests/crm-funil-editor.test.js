@@ -93,3 +93,31 @@ test('backend antigo (sem filtrosPorFunil): mantém o editor anterior e não env
   assert.equal(document.querySelector('[data-rd-filtro]'), null);
   assert.equal(document.querySelector('[data-rd-map-explicito]'), null);
 });
+
+test('mostra a contagem exata do funil: total, status, etapas, responsáveis e meses', () => {
+  const t = carregar();
+  const comContagem = {
+    ...op,
+    funis: op.funis.map((x) => (x.id === F1 ? { ...x, total: { negociacoes: 1234, exato: true } } : x)),
+    contagens: {
+      atualizadoEm: '2026-09-30T02:40:00Z', emAndamento: false,
+      porFunil: {
+        [F1]: {
+          total: 1234, status: { won: 1000, lost: 200, ongoing: 34 },
+          etapas: [{ chave: 'e1', nome: 'Novo', negociacoes: 1234 }],
+          responsaveis: [{ chave: RAISSA, nome: 'Raissa', negociacoes: 900 }, { chave: GIOVANA, nome: 'Giovana', negociacoes: 334 }],
+          meses: [{ mes: '2026-08', negociacoes: 600 }, { mes: '2026-09', negociacoes: 634 }],
+        },
+      },
+    },
+  };
+  const { document } = parseHTML(`<html><body>${t.formHtml({ id: 'rd_station' }, f({ funis: [{ pipelineId: F1, etapas: [], mapeamento: auto }] }), comContagem)}</body></html>`);
+  const texto = document.body.textContent.replace(/\s+/g, ' ');
+  assert.match(texto, /1\.234 negociação\(ões\) no RD/);
+  assert.match(texto, /1\.000 ganhas · 34 em andamento · 200 perdidas/);
+  assert.match(texto, /Novo \(1\.234\)/);
+  assert.match(texto, /Raissa ?900/);
+  assert.match(texto, /2026-09 ?634/);
+  // Funil sem contagem: nada inventado.
+  assert.doesNotMatch(document.querySelector(`[data-rd-funil-body="${F2}"]`).textContent, /Negociações deste funil/);
+});
