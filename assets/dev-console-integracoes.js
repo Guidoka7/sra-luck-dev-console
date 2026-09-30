@@ -598,7 +598,7 @@
   const CAMPOS_APP_CA = [
     ['client_id', 'Client ID', 'text', 'Do App de Desenvolvimento (Portal do Desenvolvedor)'],
     ['client_secret', 'Client Secret', 'password', 'Nunca é exibido de volta; só a máscara'],
-    ['redirect_uri', 'Redirect URI', 'text', 'App de Desenvolvimento: https://www.contaazul.com'],
+    ['redirect_uri', 'Redirect URI', 'text', 'Igual ao portal (App de Desenvolvimento: https://contaazul.com)'],
   ];
   function formularioAppCa(s, cred, conexao) {
     const campo = (k) => (cred?.campos || []).find((c) => c.chave === k) || {};
@@ -651,8 +651,8 @@
         <button class="dc-btn" data-ca="sincronizar"${s.conectado ? '' : ' disabled'}>Sincronização manual</button>
         <button class="dc-btn danger" data-ca="desconectar"${s.conectado ? '' : ' disabled'}>Desconectar</button>
       </div>
-      <div class="dc-note" style="margin-top:8px"><b>App de Desenvolvimento:</b> a Conta Azul devolve o login para a Redirect URI do app (https://www.contaazul.com), fora do Sra Luck. Depois de <b>Conectar</b> e entrar com o usuário do ERP de teste, copie o endereço completo da barra do navegador (tem <span class="dc-mono">?code=…&state=…</span>) e cole abaixo em até 3 minutos.</div>
-      <div style="display:flex;gap:8px;margin-top:6px"><input class="dc-input grow" type="password" autocomplete="off" spellcheck="false" data-ca-retorno placeholder="https://www.contaazul.com/?code=…&state=…"><button class="dc-btn primary" data-ca="concluir">Concluir conexão</button></div>
+      <div class="dc-note" style="margin-top:8px"><b>App de Desenvolvimento:</b> a Conta Azul devolve o login para a Redirect URI do app (ex.: https://contaazul.com), fora do Sra Luck. Depois de <b>Conectar</b> e entrar com o usuário do ERP de teste, copie o endereço completo da barra do navegador (tem <span class="dc-mono">?code=…&state=…</span>) e cole abaixo em até 3 minutos.</div>
+      <div style="display:flex;gap:8px;margin-top:6px"><input class="dc-input grow" type="password" autocomplete="off" spellcheck="false" data-ca-retorno placeholder="https://contaazul.com/?code=…&state=… (ou www.contaazul.com)"><button class="dc-btn primary" data-ca="concluir">Concluir conexão</button></div>
       <p class="dc-ov-p dc-muted">A sincronização manual executa a mesma rodada do agendador (regras automáticas seguras).</p>
       <h3 class="dc-nc-h">Diagnóstico da API (Fase 1, só leitura)</h3>
       <div class="dc-note">Chamadas reais na conta conectada: empresa, pessoa pelo CPF, pessoa pelo ID, receitas da pessoa, estrutura de uma parcela e alterações das últimas 24 h. Registra só a estrutura das respostas e valores não pessoais (status, datas, valores, versão) — sem nome, documento ou e-mail.</div>
