@@ -594,9 +594,31 @@
   // Conta Azul: central técnica (configuração, OAuth, saúde, webhooks e logs). Nada financeiro aqui:
   // vínculo de clientes e parcelas é feito pela equipe no Admin. O backend nunca devolve segredo.
   const TOKEN_ESTADO = { valido: ['Token válido', 'ok'], expirado: ['Token expirado', 'warn'], ausente: ['Sem token', 'bad'], sem_validade: ['Token sem validade', 'warn'] };
-  const EVENTO_CA = { token_renovado: 'Token renovado', token_falhou: 'Falha ao renovar token', conexao_testada: 'Conexão testada', desconectado: 'Desconectado', sync_manual: 'Sincronização manual', sync_agendada: 'Sincronização agendada' };
+  const EVENTO_CA = { token_renovado: 'Token renovado', token_falhou: 'Falha ao renovar token', conexao_testada: 'Conexão testada', desconectado: 'Desconectado', sync_manual: 'Sincronização manual', sync_agendada: 'Sincronização agendada', oauth_conectado: 'OAuth conectado', oauth_falhou: 'Falha no OAuth', diagnostico_api: 'Diagnóstico da API' };
+  const CAMPOS_APP_CA = [
+    ['client_id', 'Client ID', 'text', 'Do App de Desenvolvimento (Portal do Desenvolvedor)'],
+    ['client_secret', 'Client Secret', 'password', 'Nunca é exibido de volta; só a máscara'],
+    ['redirect_uri', 'Redirect URI', 'text', 'App de Desenvolvimento: https://www.contaazul.com'],
+  ];
+  function formularioAppCa(s, cred, conexao) {
+    const campo = (k) => (cred?.campos || []).find((c) => c.chave === k) || {};
+    const cfg = conexao?.config || {};
+    return `<h3 class="dc-nc-h">Configuração do App (credenciais e endereços)</h3>
+      <div class="dc-note">Client Secret e tokens vão direto para o cofre cifrado do Sra Luck. Esta tela só envia valores novos e recebe de volta a máscara. Deixe em branco o que não quiser trocar.</div>
+      <div class="dc-grid g2" style="margin-top:8px" data-ca-form>
+        ${CAMPOS_APP_CA.map(([k, l, t, ajuda]) => `<div class="dc-field"><label for="ca-${k}">${esc(l)}</label><input id="ca-${k}" class="dc-input" type="${t}" autocomplete="off" spellcheck="false" data-ca-cred="${k}" placeholder="${esc(campo(k).mascara ? `salvo: ${campo(k).mascara}` : ajuda)}"><small class="dc-muted">${esc(campo(k).origem === 'nao_configurado' || !campo(k).origem ? 'não configurado' : `salvo${campo(k).atualizadoEm ? ` ${DC.relTime(campo(k).atualizadoEm)}` : ''}`)}</small></div>`).join('')}
+        <div class="dc-field"><label for="ca-ambiente">Ambiente</label><select id="ca-ambiente" class="dc-input" data-ca-cfg="ambiente"><option value="teste"${cfg.ambiente !== 'producao' ? ' selected' : ''}>Teste (conta ERP de desenvolvimento)</option><option value="producao"${cfg.ambiente === 'producao' ? ' selected' : ''}>Produção (conta real)</option></select></div>
+        <div class="dc-field"><label for="ca-authorizeUrl">Authorization URL</label><input id="ca-authorizeUrl" class="dc-input" data-ca-cfg="authorizeUrl" value="${esc(cfg.authorizeUrl || s.urls?.authorizeUrl || '')}"></div>
+        <div class="dc-field"><label for="ca-tokenUrl">Token URL</label><input id="ca-tokenUrl" class="dc-input" data-ca-cfg="tokenUrl" value="${esc(cfg.tokenUrl || s.urls?.tokenUrl || '')}"></div>
+        <div class="dc-field"><label for="ca-apiBaseUrl">API Base URL</label><input id="ca-apiBaseUrl" class="dc-input" data-ca-cfg="apiBaseUrl" value="${esc(cfg.apiBaseUrl || s.urls?.apiBaseUrl || '')}"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="dc-btn primary" data-ca="salvar-config">Salvar configuração</button></div>`;
+  }
   async function abaCentralContaAzul(alvo) {
-    const r = await DC.api('/api/admin/integrations/conta-azul/central/status');
+    const [r, credR] = await Promise.all([DC.api('/api/admin/integrations/conta-azul/central/status'), DC.api('/api/admin/integrations/credenciais')]);
+    if (r.ok && !S.catalogo) await carregar();
+    const cred = credR.ok ? (credR.data.provedores || []).find((p) => p.id === 'conta_azul') : null;
+    const conexaoFuncao = integracao('conta_azul')?.funcoes?.find((f) => f.id === 'conexao') || null;
     if (!r.ok) { alvo.innerHTML = `<div class="dc-warn-box">${esc(r.status === 404 ? 'A central técnica ainda não está publicada neste Sra Luck (branch claude/conta-azul-parcela-unica).' : (r.data?.erro || r.error || 'Central indisponível.'))}</div>`; return; }
     const s = r.data, t = s.token || {};
     const [tokTxt, tokTom] = TOKEN_ESTADO[t.estado] || [t.estado || '—', 'neutral'];
@@ -620,6 +642,7 @@
         ${linha('Última sincronização', ultimoSync ? `${esc(quando(ultimoSync.created_at))} · ${esc(ultimoSync.status)}` : 'nunca', ultimoSync?.erro ? esc(ultimoSync.erro) : '')}
         ${linha('Último erro', s.ultimoErro ? `${esc(EVENTO_CA[s.ultimoErro.event_type] || s.ultimoErro.event_type)} · ${esc(quando(s.ultimoErro.created_at))}` : 'nenhum', s.ultimoErro?.erro ? esc(s.ultimoErro.erro) : '')}
       </div>
+      ${formularioAppCa(s, cred, conexaoFuncao)}
       <h3 class="dc-nc-h">Ações</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="dc-btn primary" data-ca="conectar">${s.conectado ? 'Reautorizar' : 'Conectar'} (OAuth)</button>
@@ -628,7 +651,13 @@
         <button class="dc-btn" data-ca="sincronizar"${s.conectado ? '' : ' disabled'}>Sincronização manual</button>
         <button class="dc-btn danger" data-ca="desconectar"${s.conectado ? '' : ' disabled'}>Desconectar</button>
       </div>
-      <p class="dc-ov-p dc-muted">Salvar configuração: credenciais na aba Visão (Client ID, Client Secret, Redirect URI) e ambiente/URLs em Funções › Conexão. A sincronização manual executa a mesma rodada do agendador (regras automáticas seguras).</p>
+      <div class="dc-note" style="margin-top:8px"><b>App de Desenvolvimento:</b> a Conta Azul devolve o login para a Redirect URI do app (https://www.contaazul.com), fora do Sra Luck. Depois de <b>Conectar</b> e entrar com o usuário do ERP de teste, copie o endereço completo da barra do navegador (tem <span class="dc-mono">?code=…&state=…</span>) e cole abaixo em até 3 minutos.</div>
+      <div style="display:flex;gap:8px;margin-top:6px"><input class="dc-input grow" type="password" autocomplete="off" spellcheck="false" data-ca-retorno placeholder="https://www.contaazul.com/?code=…&state=…"><button class="dc-btn primary" data-ca="concluir">Concluir conexão</button></div>
+      <p class="dc-ov-p dc-muted">A sincronização manual executa a mesma rodada do agendador (regras automáticas seguras).</p>
+      <h3 class="dc-nc-h">Diagnóstico da API (Fase 1, só leitura)</h3>
+      <div class="dc-note">Chamadas reais na conta conectada: empresa, pessoa pelo CPF, pessoa pelo ID, receitas da pessoa, estrutura de uma parcela e alterações das últimas 24 h. Registra só a estrutura das respostas e valores não pessoais (status, datas, valores, versão) — sem nome, documento ou e-mail.</div>
+      <div style="display:flex;gap:8px;margin-top:6px"><input class="dc-input" style="width:220px" data-ca-cpf placeholder="CPF de uma pessoa de teste"><button class="dc-btn" data-ca="diagnostico"${s.conectado ? '' : ' disabled'}>Rodar diagnóstico</button></div>
+      <div data-ca-diag></div>
       <h3 class="dc-nc-h">Endereços (${esc(s.ambiente === 'producao' ? 'produção' : 'teste')})</h3>
       <div class="dc-ip-list">
         ${linha('Authorization URL', `<span class="dc-mono">${esc(s.urls?.authorizeUrl)}</span>`)}
@@ -648,6 +677,35 @@
       const acao = b.dataset.ca;
       const recarregar = () => abaCentralContaAzul(alvo);
       if (acao === 'conectar') return window.DCIntegrationEditor?.oauthProvider('conta_azul', b);
+      if (acao === 'salvar-config') {
+        const creds = [...alvo.querySelectorAll('[data-ca-cred]')].map((i) => [i.dataset.caCred, i.value.trim()]).filter(([, v]) => v);
+        const config = Object.fromEntries([...alvo.querySelectorAll('[data-ca-cfg]')].map((i) => [i.dataset.caCfg, i.value.trim()]));
+        const x = await DC.action(b, async () => {
+          for (const [chave, valor] of creds) {
+            const c = await DC.api('/api/admin/integrations/credenciais', { method: 'POST', body: { provedor: 'conta_azul', chave, valor } });
+            if (!c.ok) return c;
+          }
+          return DC.api('/api/admin/integrations/config', { method: 'POST', body: { provedor: 'conta_azul', funcao: 'conexao', config, versao: conexaoFuncao?.versao ?? 0 } });
+        }, { success: 'Configuração salva. Segredos no cofre; a integração fica desativada até nova validação.' });
+        alvo.querySelectorAll('[data-ca-cred]').forEach((i) => { i.value = ''; });
+        if (x?.ok) { await carregar(); return recarregar(); }
+        return;
+      }
+      if (acao === 'concluir') {
+        const campo = alvo.querySelector('[data-ca-retorno]');
+        const url = String(campo?.value || '').trim();
+        if (!url) return DC.toast('Cole o endereço de retorno da Conta Azul.', true);
+        const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/central/concluir-oauth', { method: 'POST', body: { url }, timeout: 30000 }), { success: 'Conta Azul conectada: tokens salvos no cofre.' });
+        if (campo) campo.value = '';
+        return x?.ok ? recarregar() : undefined;
+      }
+      if (acao === 'diagnostico') {
+        const cpf = String(alvo.querySelector('[data-ca-cpf]')?.value || '').replace(/\D/g, '');
+        const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/central/diagnostico', { method: 'POST', body: { cpf }, timeout: 60000 }));
+        const box = alvo.querySelector('[data-ca-diag]');
+        if (x?.ok && box) box.innerHTML = `<div class="dc-ip-list" style="margin-top:8px">${(x.data.etapas || []).map((e) => `<div class="dc-ip-row"><b>${esc(e.etapa.replace(/_/g, ' '))}</b><span>${e.ok ? `HTTP ${esc(e.status)} · ${esc(e.ms)} ms${e.observacao ? ` · ${esc(e.observacao)}` : ''}` : esc(e.erro || 'falhou')}${e.cabecalhos && Object.keys(e.cabecalhos).length ? `<small class="dc-mono">${esc(Object.entries(e.cabecalhos).map(([k, v]) => `${k}: ${v}`).join(' · '))}</small>` : ''}${e.formato ? `<details><summary class="dc-muted">estrutura da resposta</summary><pre class="dc-codebox">${esc(JSON.stringify(e.formato, null, 1))}</pre></details>` : ''}</span>${DC.chip(e.ok ? 'OK' : 'Falhou', e.ok ? 'ok' : 'bad')}</div>`).join('')}</div>`;
+        return;
+      }
       if (acao === 'testar') { const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/central/testar-conexao', { method: 'POST', body: {}, timeout: 30000 })); if (x?.ok) DC.toast(`Conexão OK: ${x.data.empresa?.nome || 'empresa'} (${x.data.latenciaMs} ms).`); return recarregar(); }
       if (acao === 'renovar') { const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/central/renovar-token', { method: 'POST', body: {}, timeout: 30000 }), { success: 'Token renovado; o refresh token novo foi guardado no cofre.' }); return x && recarregar(); }
       if (acao === 'sincronizar') { const x = await DC.action(b, () => DC.api('/api/admin/integrations/conta-azul/sincronizar', { method: 'POST', body: {}, timeout: 60000 })); if (x?.ok) DC.toast(x.data.executada === false ? `Não executada: ${x.data.motivo}` : `Sincronização ${x.data.status}${x.data.erro ? `: ${x.data.erro}` : ''}.`, x.data.status === 'erro'); return recarregar(); }

@@ -27,6 +27,15 @@ function normalizeBaseUrl(value) {
  * primeiro, variável de ambiente como reserva — via getSecret.
  */
 async function sraConnection() {
+  // Deploy de Preview (validação isolada, ex.: Conta Azul com o ERP de teste): quando a Vercel
+  // define SRA_LUCK_PREVIEW_BASE_URL para o Preview, ele aponta SÓ para o Sra Luck de teste,
+  // sem ler nem alterar o cofre compartilhado com a produção. Produção não muda.
+  if (process.env.VERCEL_ENV === 'preview' && String(process.env.SRA_LUCK_PREVIEW_BASE_URL || '').trim()) {
+    const baseRaw = String(process.env.SRA_LUCK_PREVIEW_BASE_URL).trim();
+    const base = normalizeBaseUrl(baseRaw);
+    const token = String(process.env.SRA_LUCK_PREVIEW_SERVICE_TOKEN || '').trim();
+    return { base, token, configured: Boolean(base), tokenConfigured: Boolean(token), legacy: false, invalid: !base, alvo: 'preview' };
+  }
   const [baseRaw, tokenRaw] = await Promise.all([getSecret('SRA_LUCK_BASE_URL'), getSecret('SRA_LUCK_SERVICE_TOKEN')]);
   const base = normalizeBaseUrl(baseRaw);
   const token = String(tokenRaw || '').trim();
