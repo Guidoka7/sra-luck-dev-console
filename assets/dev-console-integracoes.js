@@ -30,6 +30,22 @@
   const podeConfigurar = () => Boolean(DC.currentUser);
   const chip = (s) => DC.chip(...(SITUACAO[s] || [s, 'neutral']));
   const quando = (v) => (v ? DC.dateTimeFmt.format(new Date(v)) : '—');
+  const STATUS_RD = { won: 'ganhas', ongoing: 'em andamento', lost: 'perdidas', paused: 'pausadas' };
+  const n = (v) => Number(v || 0).toLocaleString('pt-BR');
+  /** Contagem exata do funil (varredura do Sra Luck): status, etapas, responsáveis e meses. */
+  const contagemDe = (op, funilId) => op?.contagens?.porFunil?.[funilId] || null;
+  const statusTexto = (c) => c ? Object.entries(STATUS_RD).filter(([k]) => c.status?.[k]).map(([k, rotulo]) => `${n(c.status[k])} ${rotulo}`).join(' · ') : '';
+  const detalheContagemHtml = (c, atualizadoEm) => {
+    if (!c) return '';
+    const linhas = (lista, max) => lista.slice(0, max).map((x) => `<li><span>${esc(x.nome ?? x.mes)}</span><b>${n(x.negociacoes)}</b></li>`).join('');
+    return `<details class="dc-rd-contagem"><summary>Negociações deste funil no RD: ${n(c.total)}${statusTexto(c) ? ` · ${esc(statusTexto(c))}` : ''}</summary>
+      <div class="dc-rd-contagem-grid">
+        <div><b>Por responsável</b><ul>${linhas(c.responsaveis || [], 30)}</ul></div>
+        <div><b>Por mês de criação</b><ul>${linhas((c.meses || []).slice().reverse(), 36)}</ul></div>
+      </div>
+      <small class="dc-muted">Contagem exata de todas as negociações do funil${atualizadoEm ? `, feita ${esc(DC.relTime(atualizadoEm))}` : ''}.</small>
+    </details>`;
+  };
   /** Quantas negociações o funil tem no RD (catálogo; acima de 10 mil o RD só permite estimar). */
   const totalNoRd = (funil) => {
     const t = funil?.total;
@@ -189,16 +205,17 @@
         <div class="dc-rd-funil-row">
           <label class="dc-rd-funil-main">
             <input type="checkbox" data-rd-funil-toggle value="${esc(funil.id)}"${marcado ? ' checked' : ''}${dis}/>
-            <span><b>${esc(funil.nome)}</b><small>${totalNoRd(funil)}${marcado ? resumo : `${totalEtapas} etapa(s)`}</small></span>
+            <span><b>${esc(funil.nome)}</b><small>${totalNoRd(funil)}${contagemDe(op, funil.id) ? `${esc(statusTexto(contagemDe(op, funil.id)))} · ` : ''}${marcado ? resumo : `${totalEtapas} etapa(s)`}</small></span>
           </label>
           <button type="button" class="dc-rd-config-btn" data-rd-funil-open="${esc(funil.id)}" aria-expanded="false"${marcado ? '' : ' disabled'}>Configurar</button>
         </div>
         <div class="dc-rd-funil-body" data-rd-funil-body="${esc(funil.id)}" hidden>
+          ${detalheContagemHtml(contagemDe(op, funil.id), op?.contagens?.atualizadoEm)}
           ${amostra}
           <section class="dc-rd-subsection">
             <div class="dc-rd-subhead"><b>Etapas</b><small>Nenhuma marcada = todas.</small></div>
             <div class="dc-ip-checks dc-rd-stage-grid">
-              ${(funil.etapas || []).map((etapa) => `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/><span>${esc(etapa.nome)}</span></label>`).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
+              ${(funil.etapas || []).map((etapa) => { const qtd = contagemDe(op, funil.id)?.etapas?.find((x) => x.chave === etapa.id)?.negociacoes; return `<label><input type="checkbox" data-rd-stage data-pipeline="${esc(funil.id)}" value="${esc(etapa.id)}"${etapasMarcadas.includes(etapa.id) ? ' checked' : ''}${dis}/><span>${esc(etapa.nome)}${contagemDe(op, funil.id) ? ` <small class="dc-muted">(${n(qtd)})</small>` : ''}</span></label>`; }).join('') || '<small class="dc-muted">Este funil não retornou etapas.</small>'}
             </div>
           </section>
           ${explicito ? filtrosHtml(funil, cfg, dis) : ''}

@@ -564,3 +564,10 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}b
 .dc-rd-campo label { display: grid; gap: 6px; }
 .dc-rd-campo small { overflow-wrap: anywhere; }
 .dc-rd-campo button { justify-self: start; }
+
+/* Contagem exata das negociações do funil (Integrações > RD) */
+.dc-rd-contagem{margin:0 0 10px;border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:8px 10px}
+.dc-rd-contagem summary{cursor:pointer;font-weight:600;font-size:12.5px}
+.dc-rd-contagem-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:8px 0}
+.dc-rd-contagem-grid ul{list-style:none;margin:4px 0 0;padding:0;max-height:220px;overflow:auto}
+.dc-rd-contagem-grid li{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:2px 0;border-bottom:1px dashed var(--line,#eee)}
